@@ -1,0 +1,30 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.venv/
+dist/
+build/
+
+# Local platform and cluster state must never be published.
+.env
+.env.*
+!.env.example
+*.kubeconfig
+kubeconfig*
+*.pem
+*.key
+secrets/
+rendered-secrets/
+.k3s/
+
+# Runtime systems of record and generated evidence stay outside Git.
+mlruns/
+minio-data/
+model-cache/
+raw-data/
+raw-evaluation/
+evidence/
+out/
+

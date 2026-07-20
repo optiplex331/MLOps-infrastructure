@@ -1,0 +1,28 @@
+name: cpu-only-contracts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Infrastructure Repository
+        uses: actions/checkout@v4
+        with:
+          path: MLOps-infrastructure
+      - name: Check out Project Repository contracts and fixtures
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/MLOps
+          path: MLOps
+      - name: Run CPU-only contract and boundary checks
+        env:
+          MLOPS_PROJECT_REPO: ${{ github.workspace }}/MLOps
+        run: python3 -m unittest discover -s tests -v
+        working-directory: MLOps-infrastructure
