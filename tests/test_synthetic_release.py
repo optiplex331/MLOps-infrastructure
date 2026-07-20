@@ -11,113 +11,223 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = Path(os.environ.get("MLOPS_PROJECT_REPO", ROOT.parent / "MLOps"))
-REQUEST_RELATIVE = Path("fixtures/releases/rejected/release-request.json")
-PROJECT_REVISION = "1" * 40
-INFRASTRUCTURE_REVISION = "2" * 40
+PROJECT_SOURCE = Path(os.environ.get("MLOPS_PROJECT_REPO", ROOT.parent / "MLOps"))
+REQUEST_RELATIVE = Path("fixtures/releases/rejected/release-request.template.json")
 
 
-def run_release(project: Path, output: Path, *, project_revision: str = PROJECT_REVISION) -> subprocess.CompletedProcess[str]:
+def git(repo: Path, *arguments: str) -> str:
     return subprocess.run(
-        [
-            str(ROOT / "bin" / "run-synthetic-release"),
-            "--project-repo",
-            str(project),
-            "--request",
-            str(project / REQUEST_RELATIVE),
-            "--project-revision",
-            project_revision,
-            "--infrastructure-revision",
-            INFRASTRUCTURE_REVISION,
-            "--output-dir",
-            str(output),
-        ],
-        cwd=ROOT,
+        ["git", "-C", str(repo), *arguments],
+        check=True,
         capture_output=True,
         text=True,
-    )
+    ).stdout.strip()
 
 
-@unittest.skipUnless((PROJECT / REQUEST_RELATIVE).is_file(), "Project Repository fixtures are unavailable")
+def initialize(repo: Path) -> str:
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.name", "Synthetic Test")
+    git(repo, "config", "user.email", "synthetic@example.invalid")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "test: initialize fixture repository")
+    return git(repo, "rev-parse", "HEAD")
+
+
+class Repositories:
+    def __init__(self, root: Path) -> None:
+        self.infrastructure = root / "MLOps-infrastructure"
+        self.project = root / "MLOps"
+        shutil.copytree(
+            ROOT,
+            self.infrastructure,
+            ignore=shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache"),
+        )
+        self.project.mkdir()
+        shutil.copytree(PROJECT_SOURCE / "contracts", self.project / "contracts")
+        shutil.copytree(PROJECT_SOURCE / "fixtures", self.project / "fixtures")
+        self.infrastructure_revision = initialize(self.infrastructure)
+        self.project_revision = initialize(self.project)
+
+    def commit_project_change(self, message: str) -> None:
+        git(self.project, "add", ".")
+        git(self.project, "commit", "-m", message)
+        self.project_revision = git(self.project, "rev-parse", "HEAD")
+
+    def run(
+        self,
+        output: Path,
+        *,
+        project_revision: str | None = None,
+        infrastructure_revision: str | None = None,
+        project: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        project = project or self.project
+        return subprocess.run(
+            [
+                str(self.infrastructure / "bin" / "run-synthetic-release"),
+                "--project-repo",
+                str(project),
+                "--request",
+                str(project / REQUEST_RELATIVE),
+                "--project-revision",
+                project_revision or self.project_revision,
+                "--infrastructure-revision",
+                infrastructure_revision or self.infrastructure_revision,
+                "--output-dir",
+                str(output),
+            ],
+            cwd=self.infrastructure,
+            capture_output=True,
+            text=True,
+        )
+
+
+@unittest.skipUnless((PROJECT_SOURCE / REQUEST_RELATIVE).is_file(), "Project templates are unavailable")
 class SyntheticReleaseTests(unittest.TestCase):
-    def test_two_runs_are_byte_identical_and_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            first = Path(temporary) / "first"
-            second = Path(temporary) / "second"
-            one = run_release(PROJECT, first)
-            two = run_release(PROJECT, second)
-            self.assertEqual(one.returncode, 0, one.stderr)
-            self.assertEqual(two.returncode, 0, two.stderr)
-            self.assertEqual(
-                {path.name: path.read_bytes() for path in first.iterdir()},
-                {path.name: path.read_bytes() for path in second.iterdir()},
-            )
-            decision = json.loads((first / "release-decision.json").read_bytes())
-            release = json.loads((first / "model-release.json").read_bytes())
-            evidence = json.loads((first / "evidence-package.json").read_bytes())
-            self.assertEqual(decision["outcome"], "rejected")
-            self.assertEqual(release["selection"], "base")
-            self.assertIsNone(release["adapter"])
-            self.assertTrue(decision["synthetic"])
-            self.assertEqual(evidence["projectRevision"], PROJECT_REVISION)
-            self.assertEqual(evidence["infrastructureRevision"], INFRASTRUCTURE_REVISION)
-            self.assertEqual(len(evidence["entries"]), 13)
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.repositories = Repositories(self.root)
 
-    def test_manifest_and_evidence_output_digests_are_immutable(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary) / "out"
-            result = run_release(PROJECT, output)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            expected = {}
-            for line in (output / "manifest.sha256").read_text(encoding="ascii").splitlines():
-                digest, name = line.split("  ", 1)
-                expected[name] = digest
-            for name, digest in expected.items():
-                self.assertEqual(hashlib.sha256((output / name).read_bytes()).hexdigest(), digest)
-            evidence = json.loads((output / "evidence-package.json").read_bytes())
-            entries = {entry["path"]: entry["digest"] for entry in evidence["entries"]}
-            self.assertEqual(entries["output/release-decision.json"], evidence["releaseDecisionDigest"])
-            self.assertEqual(entries["output/model-release.json"], evidence["modelReleaseDigest"])
+    def test_real_heads_are_materialized_and_two_runs_are_byte_identical(self) -> None:
+        first = self.root / "first"
+        second = self.root / "second"
+        one = self.repositories.run(first)
+        two = self.repositories.run(second)
+        self.assertEqual(one.returncode, 0, one.stderr)
+        self.assertEqual(two.returncode, 0, two.stderr)
+        self.assertEqual(
+            {path.name: path.read_bytes() for path in first.iterdir()},
+            {path.name: path.read_bytes() for path in second.iterdir()},
+        )
+        request = json.loads((first / "release-request.json").read_bytes())
+        artifact = json.loads((first / "model-artifact.json").read_bytes())
+        decision = json.loads((first / "release-decision.json").read_bytes())
+        release = json.loads((first / "model-release.json").read_bytes())
+        evidence = json.loads((first / "evidence-package.json").read_bytes())
+        self.assertEqual(request["projectRevision"], self.repositories.project_revision)
+        self.assertEqual(request["infrastructureRevision"], self.repositories.infrastructure_revision)
+        self.assertEqual(artifact["provenance"]["projectRevision"], self.repositories.project_revision)
+        self.assertNotIn("${", (first / "release-request.json").read_text(encoding="utf-8"))
+        self.assertEqual(decision["outcome"], "rejected")
+        self.assertEqual(release["selection"], "base")
+        self.assertIsNone(release["adapter"])
+        self.assertEqual(evidence["projectRevision"], self.repositories.project_revision)
+        self.assertEqual(evidence["infrastructureRevision"], self.repositories.infrastructure_revision)
 
-    def test_revision_mismatch_fails_before_writing_decision(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary) / "out"
-            result = run_release(PROJECT, output, project_revision="3" * 40)
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("project revision does not match", result.stderr)
-            self.assertFalse(output.exists())
+    def test_manifest_and_evidence_form_digest_closure(self) -> None:
+        output = self.root / "out"
+        result = self.repositories.run(output)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = {}
+        for line in (output / "manifest.sha256").read_text(encoding="ascii").splitlines():
+            digest, name = line.split("  ", 1)
+            manifest[name] = "sha256:" + digest
+        self.assertEqual(
+            set(manifest),
+            {
+                "release-request.json",
+                "model-artifact.json",
+                "release-decision.json",
+                "model-release.json",
+                "evidence-package.json",
+            },
+        )
+        for name, digest in manifest.items():
+            self.assertEqual("sha256:" + hashlib.sha256((output / name).read_bytes()).hexdigest(), digest)
+        evidence = json.loads((output / "evidence-package.json").read_bytes())
+        entry_digests = {entry["digest"] for entry in evidence["entries"]}
+        entry_paths = {entry["path"] for entry in evidence["entries"]}
+        self.assertIn("project/fixtures/releases/rejected/release-request.template.json", entry_paths)
+        self.assertIn("project/fixtures/releases/rejected/model-artifact.template.json", entry_paths)
+        self.assertIn("output/release-request.json", entry_paths)
+        self.assertIn("output/model-artifact.json", entry_paths)
+        entries = {entry["path"]: entry["digest"] for entry in evidence["entries"]}
+        self.assertEqual(entries["output/release-request.json"], manifest["release-request.json"])
+        self.assertEqual(entries["output/model-artifact.json"], manifest["model-artifact.json"])
+        artifact = json.loads((output / "model-artifact.json").read_bytes())
+        referenced = {
+            artifact["baseModel"]["digest"],
+            artifact["tokenizer"]["digest"],
+            artifact["payload"]["digest"],
+            artifact["provenance"]["sourceDigest"],
+        }
+        self.assertTrue(referenced <= entry_digests)
 
-    def test_tampered_configuration_digest_fails_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            copied_project = Path(temporary) / "project"
-            shutil.copytree(PROJECT / "contracts", copied_project / "contracts")
-            shutil.copytree(PROJECT / "fixtures", copied_project / "fixtures")
-            configuration = copied_project / REQUEST_RELATIVE.parent / "release-configuration.json"
-            value = json.loads(configuration.read_bytes())
-            value["environment"] = "tampered"
-            configuration.write_text(
-                json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
-            )
-            output = Path(temporary) / "out"
-            result = run_release(copied_project, output)
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("configuration immutable digest", result.stderr)
-            self.assertFalse(output.exists())
+    def test_non_head_revision_fails_before_outputs(self) -> None:
+        output = self.root / "out"
+        result = self.repositories.run(output, project_revision="0" * 40)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("cat-file", result.stderr)
+        self.assertFalse(output.exists())
 
-    def test_tampered_payload_digest_fails_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            copied_project = Path(temporary) / "project"
-            shutil.copytree(PROJECT / "contracts", copied_project / "contracts")
-            shutil.copytree(PROJECT / "fixtures", copied_project / "fixtures")
-            payload = copied_project / "fixtures/releases/rejected/adapter-payload.txt"
-            payload.write_text("tampered", encoding="utf-8")
-            output = Path(temporary) / "out"
-            result = run_release(copied_project, output)
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("payload size", result.stderr)
-            self.assertFalse(output.exists())
+    def test_existing_non_head_commit_fails_before_outputs(self) -> None:
+        previous = self.repositories.project_revision
+        (self.repositories.project / "committed.txt").write_text("next revision\n", encoding="utf-8")
+        self.repositories.commit_project_change("test: advance project head")
+        output = self.root / "out"
+        result = self.repositories.run(output, project_revision=previous)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("must equal current HEAD", result.stderr)
+        self.assertFalse(output.exists())
+
+    def test_swapped_revisions_fail_before_outputs(self) -> None:
+        output = self.root / "out"
+        result = self.repositories.run(
+            output,
+            project_revision=self.repositories.infrastructure_revision,
+            infrastructure_revision=self.repositories.project_revision,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(output.exists())
+
+    def test_dirty_project_fails_before_outputs(self) -> None:
+        output = self.root / "out"
+        (self.repositories.project / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+        result = self.repositories.run(output)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("worktree must be clean", result.stderr)
+        self.assertFalse(output.exists())
+
+    def test_dirty_infrastructure_fails_before_outputs(self) -> None:
+        output = self.root / "out"
+        (self.repositories.infrastructure / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+        result = self.repositories.run(output)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Infrastructure Repository worktree must be clean", result.stderr)
+        self.assertFalse(output.exists())
+
+    def test_output_directory_inside_repository_is_rejected(self) -> None:
+        output = self.repositories.infrastructure / "generated-output"
+        result = self.repositories.run(output)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("output directory must be outside", result.stderr)
+        self.assertFalse(output.exists())
+
+    def test_project_without_git_metadata_is_rejected(self) -> None:
+        output = self.root / "out"
+        copied = self.root / "project-without-git"
+        shutil.copytree(self.repositories.project, copied, ignore=shutil.ignore_patterns(".git"))
+        result = self.repositories.run(output, project=copied)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("not an independent Git worktree", result.stderr)
+        self.assertFalse(output.exists())
+
+    def test_committed_tampered_configuration_fails_digest_check(self) -> None:
+        configuration = self.repositories.project / REQUEST_RELATIVE.parent / "release-configuration.json"
+        value = json.loads(configuration.read_bytes())
+        value["environment"] = "tampered"
+        configuration.write_text(
+            json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
+        )
+        self.repositories.commit_project_change("test: tamper configuration")
+        output = self.root / "out"
+        result = self.repositories.run(output)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("configuration immutable digest", result.stderr)
+        self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
     unittest.main()
-

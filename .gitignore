@@ -11,11 +11,15 @@ build/
 .env
 .env.*
 !.env.example
+credentials.json
+**/credentials.json
 *.kubeconfig
 kubeconfig*
 *.pem
 *.key
 secrets/
+secrets/**
+**/secrets/**
 rendered-secrets/
 .k3s/
 
@@ -27,4 +31,3 @@ raw-data/
 raw-evaluation/
 evidence/
 out/
-

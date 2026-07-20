@@ -23,7 +23,10 @@ class RepositoryBoundaryTests(unittest.TestCase):
     def test_sensitive_and_runtime_paths_are_ignored(self) -> None:
         dangerous = [
             ".env",
+            "credentials.json",
+            "config/credentials.json",
             "secrets/token.txt",
+            "nested/secrets/cloud-credentials.json",
             "cluster.kubeconfig",
             "rendered-secrets/app.yaml",
             "mlruns/1/meta.yaml",

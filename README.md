@@ -12,14 +12,19 @@ decision plus Evidence Package:
 ```sh
 bin/run-synthetic-release \
   --project-repo ../MLOps \
-  --request ../MLOps/fixtures/releases/rejected/release-request.json \
-  --project-revision 1111111111111111111111111111111111111111 \
-  --infrastructure-revision 2222222222222222222222222222222222222222 \
+  --request ../MLOps/fixtures/releases/rejected/release-request.template.json \
+  --project-revision "$(git -C ../MLOps rev-parse HEAD)" \
+  --infrastructure-revision "$(git rev-parse HEAD)" \
   --output-dir /tmp/mlops-synthetic-release
 ```
 
-The command is offline, requires only Python 3.11+, and never contacts a
-cluster, registry, model store, or external service. A successful command means
+Both repositories must have commits, the supplied revisions must equal their
+current `HEAD`, and both worktrees must be clean. The command materializes the
+explicit revision tokens in Project-owned templates and records both template
+and materialized bytes in evidence. The output directory must be outside both
+repositories so generating evidence cannot dirty either worktree. It is
+offline, requires Python 3.9 or newer, and never contacts a cluster, registry,
+model store, or external service. A successful command means
 only that the cross-repository contract, immutable digests, rejection policy,
 and evidence packaging worked for synthetic fixtures. It does **not** prove GPU
 execution, Kubernetes execution, model training or evaluation, serving, model
@@ -32,4 +37,3 @@ See [OWNERSHIP.md](OWNERSHIP.md) for the repository and publication boundary.
 ```sh
 python3 -m unittest discover -s tests -v
 ```
-
