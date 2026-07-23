@@ -1,0 +1,1 @@
+{"apiVersion":"v1","kind":"Service","metadata":{"labels":{"app.kubernetes.io/part-of":"mlops-release-lab"},"name":"mlflow","namespace":"mlops-lab"},"spec":{"ports":[{"name":"http","port":5000,"targetPort":"http"}],"selector":{"app.kubernetes.io/name":"mlflow"},"type":"ClusterIP"}}

@@ -1,0 +1,170 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "WorkflowTemplate",
+  "metadata": {
+    "labels": {"app.kubernetes.io/part-of": "mlops-release-lab"},
+    "name": "cpu-synthetic-release-v1",
+    "namespace": "mlops-lab"
+  },
+  "spec": {
+    "activeDeadlineSeconds": 900,
+    "arguments": {
+      "parameters": [
+        {"name": "schema-version", "value": "v1"},
+        {"name": "request-id"},
+        {"name": "requested-at"},
+        {"name": "project-revision"},
+        {"name": "infrastructure-revision"},
+        {"name": "request-digest"},
+        {"name": "configuration-digest"},
+        {"name": "fixture-digest"},
+        {"name": "evaluation-policy-digest"},
+        {"name": "candidate-artifact-id"},
+        {"name": "candidate-artifact-digest"},
+        {"name": "base-model-id"},
+        {"name": "base-model-digest"},
+        {"name": "mlflow-endpoint", "value": "http://mlflow:5000"},
+        {"name": "minio-endpoint", "value": "http://minio:9000"},
+        {"name": "inject-failure", "value": "none"}
+      ]
+    },
+    "entrypoint": "release",
+    "onExit": "finalize-execution",
+    "podGC": {"strategy": "OnWorkflowCompletion"},
+    "serviceAccountName": "release-workflow",
+    "templates": [
+      {
+        "activeDeadlineSeconds": 840,
+        "dag": {
+          "tasks": [
+            {"name": "dependency-preflight", "template": "dependency-preflight"},
+            {"dependencies": ["dependency-preflight"], "name": "start-run", "template": "start-run"},
+            {"dependencies": ["start-run"], "name": "build-content", "template": "build-content"},
+            {
+              "arguments": {
+                "artifacts": [
+                  {"from": "{{tasks.build-content.outputs.artifacts.content-identity}}", "name": "content-identity"},
+                  {"from": "{{tasks.build-content.outputs.artifacts.release-decision}}", "name": "release-decision"},
+                  {"from": "{{tasks.build-content.outputs.artifacts.model-release}}", "name": "model-release"},
+                  {"from": "{{tasks.build-content.outputs.artifacts.evidence-package}}", "name": "evidence-package"}
+                ]
+              },
+              "dependencies": ["build-content"],
+              "name": "stage-artifacts",
+              "template": "stage-artifacts"
+            },
+            {"dependencies": ["stage-artifacts"], "name": "finish-run", "template": "finish-run"},
+            {"depends": "finish-run.Succeeded", "name": "promote", "template": "promote"}
+          ]
+        },
+        "name": "release"
+      },
+      {
+        "activeDeadlineSeconds": 60,
+        "container": {
+          "args": [
+            "import sys,urllib.request\nfailure='{{workflow.parameters.inject-failure}}'\nfor name,url in [('mlflow','{{workflow.parameters.mlflow-endpoint}}/health'),('minio','{{workflow.parameters.minio-endpoint}}/minio/health/ready')]:\n  if failure in (name,'both'): raise SystemExit(f'injected {name} outage')\n  with urllib.request.urlopen(url,timeout=5) as response:\n    assert response.status == 200\n"
+          ],
+          "command": ["python", "-c"],
+          "image": "python:3.12.10-slim",
+          "resources": {"limits": {"cpu": "200m", "memory": "128Mi"}, "requests": {"cpu": "25m", "memory": "64Mi"}}
+        },
+        "name": "dependency-preflight",
+        "retryStrategy": {"backoff": {"duration": "5s", "factor": 2, "maxDuration": "20s"}, "limit": 2, "retryPolicy": "OnError"}
+      },
+      {
+        "activeDeadlineSeconds": 90,
+        "container": {
+          "args": [
+            "import json,urllib.request\nendpoint='{{workflow.parameters.mlflow-endpoint}}'\ndef call(path,body):\n data=json.dumps(body).encode(); req=urllib.request.Request(endpoint+path,data=data,headers={'Content-Type':'application/json'}); return json.load(urllib.request.urlopen(req,timeout=10))\ntry: exp=call('/api/2.0/mlflow/experiments/create',{'name':'mlops-cpu-synthetic-v1'})['experiment_id']\nexcept Exception: exp=json.load(urllib.request.urlopen(endpoint+'/api/2.0/mlflow/experiments/get-by-name?experiment_name=mlops-cpu-synthetic-v1'))['experiment']['experiment_id']\nrun=call('/api/2.0/mlflow/runs/create',{'experiment_id':exp,'start_time':0,'tags':[{'key':'workflow.uid','value':'{{workflow.uid}}'},{'key':'content.request_id','value':'{{workflow.parameters.request-id}}'}]})\nopen('/tmp/mlflow-run-id','w').write(run['run']['info']['run_id'])\n"
+          ],
+          "command": ["python", "-c"],
+          "image": "python:3.12.10-slim",
+          "resources": {"limits": {"cpu": "200m", "memory": "128Mi"}, "requests": {"cpu": "25m", "memory": "64Mi"}}
+        },
+        "name": "start-run",
+        "outputs": {"parameters": [{"name": "mlflow-run-id", "valueFrom": {"path": "/tmp/mlflow-run-id"}}]},
+        "retryStrategy": {"backoff": {"duration": "5s", "factor": 2, "maxDuration": "20s"}, "limit": 2, "retryPolicy": "OnError"}
+      },
+      {
+        "activeDeadlineSeconds": 120,
+        "container": {
+          "args": [
+            "import hashlib,json,pathlib\nout=pathlib.Path('/out'); out.mkdir()\ninputs={'schemaVersion':'{{workflow.parameters.schema-version}}','requestId':'{{workflow.parameters.request-id}}','requestedAt':'{{workflow.parameters.requested-at}}','projectRevision':'{{workflow.parameters.project-revision}}','infrastructureRevision':'{{workflow.parameters.infrastructure-revision}}','requestDigest':'{{workflow.parameters.request-digest}}','configurationDigest':'{{workflow.parameters.configuration-digest}}','fixtureDigest':'{{workflow.parameters.fixture-digest}}','evaluationPolicyDigest':'{{workflow.parameters.evaluation-policy-digest}}','candidateArtifactId':'{{workflow.parameters.candidate-artifact-id}}','candidateArtifactDigest':'{{workflow.parameters.candidate-artifact-digest}}','baseModelId':'{{workflow.parameters.base-model-id}}','baseModelDigest':'{{workflow.parameters.base-model-digest}}'}\ndef payload(v): return (json.dumps(v,sort_keys=True,separators=(',',':'))+'\\n').encode()\ndef digest(v): return 'sha256:'+hashlib.sha256(payload(v)).hexdigest()\nidentity={'digest':digest(inputs),'inputs':inputs}\ndecision={'contentIdentityDigest':identity['digest'],'failedClauses':['synthetic_fixture_forces_rejection'],'outcome':'rejected','schemaVersion':'v1','selectedArtifactDigest':inputs['baseModelDigest'],'selectedModelId':inputs['baseModelId']}\nrelease={'artifactDigest':inputs['baseModelDigest'],'modelId':inputs['baseModelId'],'schemaVersion':'v1','selection':'base'}\nevidence={'contentIdentity':identity,'decisionDigest':digest(decision),'executionIdentity':{'mlflowRunId':'{{tasks.start-run.outputs.parameters.mlflow-run-id}}','workflowUid':'{{workflow.uid}}'},'lineage':{'infrastructureRevision':inputs['infrastructureRevision'],'minioObjects':[{'digest':inputs['candidateArtifactDigest'],'key':'sha256/'+inputs['candidateArtifactDigest'].split(':')[1]}],'projectRevision':inputs['projectRevision']},'limitations':['CPU-only synthetic rejected workflow; no GPU, model-training, or production capability evidence.'],'schemaVersion':'v1','terminalState':'rejected'}\nfor name,value in [('content-identity',identity),('release-decision',decision),('model-release',release),('evidence-package',evidence)]: (out/f'{name}.json').write_bytes(payload(value))\n"
+          ],
+          "command": ["python", "-c"],
+          "image": "python:3.12.10-slim",
+          "resources": {"limits": {"cpu": "300m", "memory": "256Mi"}, "requests": {"cpu": "50m", "memory": "128Mi"}}
+        },
+        "name": "build-content",
+        "outputs": {
+          "artifacts": [
+            {"archive": {"none": {}}, "name": "content-identity", "path": "/out/content-identity.json"},
+            {"archive": {"none": {}}, "name": "release-decision", "path": "/out/release-decision.json"},
+            {"archive": {"none": {}}, "name": "model-release", "path": "/out/model-release.json"},
+            {"archive": {"none": {}}, "name": "evidence-package", "path": "/out/evidence-package.json"}
+          ]
+        },
+        "retryStrategy": {"limit": 0, "retryPolicy": "OnError"}
+      },
+      {
+        "activeDeadlineSeconds": 120,
+        "container": {
+          "args": ["import hashlib,json,pathlib\nroot=pathlib.Path('/inputs'); entries=[]\nfor path in sorted(root.iterdir()): entries.append({'digest':'sha256:'+hashlib.sha256(path.read_bytes()).hexdigest(),'name':path.name})\npathlib.Path('/out').mkdir(); pathlib.Path('/out/staged-manifest.json').write_text(json.dumps({'entries':entries,'schemaVersion':'v1'},sort_keys=True,separators=(',',':'))+'\\n')\n"],
+          "command": ["python", "-c"],
+          "image": "python:3.12.10-slim",
+          "resources": {"limits": {"cpu": "200m", "memory": "128Mi"}, "requests": {"cpu": "25m", "memory": "64Mi"}}
+        },
+        "inputs": {
+          "artifacts": [
+            {"name": "content-identity", "path": "/inputs/content-identity.json"},
+            {"name": "release-decision", "path": "/inputs/release-decision.json"},
+            {"name": "model-release", "path": "/inputs/model-release.json"},
+            {"name": "evidence-package", "path": "/inputs/evidence-package.json"}
+          ]
+        },
+        "name": "stage-artifacts",
+        "outputs": {"artifacts": [{"archive": {"none": {}}, "name": "staged-manifest", "path": "/out/staged-manifest.json"}]},
+        "retryStrategy": {"backoff": {"duration": "5s", "factor": 2, "maxDuration": "20s"}, "limit": 2, "retryPolicy": "OnError"}
+      },
+      {
+        "activeDeadlineSeconds": 90,
+        "container": {
+          "args": [
+            "import json,urllib.request\nendpoint='{{workflow.parameters.mlflow-endpoint}}'; run='{{tasks.start-run.outputs.parameters.mlflow-run-id}}'; body=json.dumps({'run_id':run,'status':'FINISHED','end_time':0}).encode(); req=urllib.request.Request(endpoint+'/api/2.0/mlflow/runs/update',data=body,headers={'Content-Type':'application/json'}); urllib.request.urlopen(req,timeout=10)\n"
+          ],
+          "command": ["python", "-c"],
+          "image": "python:3.12.10-slim",
+          "resources": {"limits": {"cpu": "200m", "memory": "128Mi"}, "requests": {"cpu": "25m", "memory": "64Mi"}}
+        },
+        "name": "finish-run",
+        "retryStrategy": {"backoff": {"duration": "5s", "factor": 2, "maxDuration": "20s"}, "limit": 2, "retryPolicy": "OnError"}
+      },
+      {
+        "activeDeadlineSeconds": 30,
+        "container": {
+          "args": ["print('synthetic rejected decision retained pinned base release')"],
+          "command": ["python", "-c"],
+          "image": "python:3.12.10-slim",
+          "resources": {"limits": {"cpu": "100m", "memory": "64Mi"}, "requests": {"cpu": "10m", "memory": "32Mi"}}
+        },
+        "name": "promote",
+        "retryStrategy": {"limit": 0, "retryPolicy": "OnError"}
+      },
+      {
+        "activeDeadlineSeconds": 90,
+        "container": {
+          "args": [
+            "import json,urllib.request\nstatus='{{workflow.status}}'\nif status == 'Succeeded': raise SystemExit(0)\nendpoint='{{workflow.parameters.mlflow-endpoint}}'; run='{{tasks.start-run.outputs.parameters.mlflow-run-id}}'\nif not run: raise SystemExit(0)\nbody=json.dumps({'run_id':run,'status':'FAILED','end_time':0}).encode(); req=urllib.request.Request(endpoint+'/api/2.0/mlflow/runs/update',data=body,headers={'Content-Type':'application/json'}); urllib.request.urlopen(req,timeout=10)\n"
+          ],
+          "command": ["python", "-c"],
+          "image": "python:3.12.10-slim",
+          "resources": {"limits": {"cpu": "200m", "memory": "128Mi"}, "requests": {"cpu": "25m", "memory": "64Mi"}}
+        },
+        "name": "finalize-execution",
+        "retryStrategy": {"backoff": {"duration": "5s", "factor": 2, "maxDuration": "20s"}, "limit": 2, "retryPolicy": "OnError"}
+      }
+    ],
+    "ttlStrategy": {"secondsAfterCompletion": 86400}
+  }
+}

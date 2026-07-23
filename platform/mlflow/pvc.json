@@ -1,0 +1,1 @@
+{"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"annotations":{"mlops-lab/persistence-scope":"lab-only"},"labels":{"app.kubernetes.io/part-of":"mlops-release-lab"},"name":"mlflow-backend","namespace":"mlops-lab"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"5Gi"}},"storageClassName":"local-path"}}

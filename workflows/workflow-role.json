@@ -1,0 +1,1 @@
+{"apiVersion":"rbac.authorization.k8s.io/v1","kind":"Role","metadata":{"labels":{"app.kubernetes.io/part-of":"mlops-release-lab"},"name":"release-workflow","namespace":"mlops-lab"},"rules":[{"apiGroups":["argoproj.io"],"resources":["workflowtaskresults"],"verbs":["create","patch"]},{"apiGroups":[""],"resources":["pods","pods/log"],"verbs":["get","list","watch"]}]}

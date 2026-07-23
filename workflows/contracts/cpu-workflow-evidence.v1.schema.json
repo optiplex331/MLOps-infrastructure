@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contentIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "inputs": {"type": "object"}
+      },
+      "required": ["digest", "inputs"],
+      "type": "object"
+    },
+    "decisionDigest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "executionIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "mlflowRunId": {"minLength": 1, "type": "string"},
+        "workflowUid": {"minLength": 1, "type": "string"}
+      },
+      "required": ["workflowUid", "mlflowRunId"],
+      "type": "object"
+    },
+    "lineage": {
+      "additionalProperties": false,
+      "properties": {
+        "infrastructureRevision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+        "minioObjects": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+              "key": {"pattern": "^sha256/[0-9a-f]{64}$", "type": "string"}
+            },
+            "required": ["key", "digest"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "projectRevision": {"pattern": "^[0-9a-f]{40}$", "type": "string"}
+      },
+      "required": ["projectRevision", "infrastructureRevision", "minioObjects"],
+      "type": "object"
+    },
+    "limitations": {"items": {"minLength": 1, "type": "string"}, "minItems": 1, "type": "array"},
+    "schemaVersion": {"const": "v1"},
+    "terminalState": {"enum": ["rejected", "failed"]}
+  },
+  "required": ["schemaVersion", "terminalState", "contentIdentity", "decisionDigest", "executionIdentity", "lineage", "limitations"],
+  "type": "object"
+}
