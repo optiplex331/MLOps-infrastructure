@@ -1,0 +1,22 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {"labels": {"app.kubernetes.io/name": "gpu-smoke", "mlops.local/evidence": "host-admission"}, "name": "gpu-smoke", "namespace": "mlops-host-admission"},
+  "spec": {
+    "activeDeadlineSeconds": 120,
+    "automountServiceAccountToken": false,
+    "containers": [{
+      "args": ["--query-gpu=name,memory.total,driver_version,temperature.gpu,power.draw", "--format=csv,noheader,nounits"],
+      "command": ["nvidia-smi"],
+      "image": "nvidia/cuda@sha256:8767a245ed2c481eb245d8f6c625accc3788e1fb8612403d6b4cd4645a4f09c7",
+      "imagePullPolicy": "IfNotPresent",
+      "name": "cuda-smoke",
+      "resources": {"limits": {"cpu": "500m", "memory": "256Mi", "nvidia.com/gpu": "1"}, "requests": {"cpu": "100m", "memory": "128Mi", "nvidia.com/gpu": "1"}},
+      "securityContext": {"allowPrivilegeEscalation": false, "capabilities": {"drop": ["ALL"]}, "readOnlyRootFilesystem": true, "runAsNonRoot": true, "runAsUser": 65532}
+    }],
+    "nodeSelector": {"kubernetes.io/arch": "amd64", "mlops.local/gpu": "rtx-3080"},
+    "restartPolicy": "Never",
+    "runtimeClassName": "nvidia",
+    "tolerations": [{"effect": "NoSchedule", "key": "mlops.local/gpu", "operator": "Equal", "value": "dedicated"}]
+  }
+}
