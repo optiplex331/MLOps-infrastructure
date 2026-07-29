@@ -24,6 +24,14 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+      - name: Run CPU-safe checks
+        run: ./bin/check-ci
       - uses: docker/setup-buildx-action@v3
       - name: Set build timestamp
         id: metadata
