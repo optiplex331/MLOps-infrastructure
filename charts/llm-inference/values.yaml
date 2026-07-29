@@ -24,6 +24,13 @@ serving:
   maxNewTokens: 512
   gpuMemoryUtilization: 0.85
 
+speculativeDecoding:
+  enabled: false
+  draftModel:
+    id: Qwen/Qwen3-0.6B
+    revision: ""
+  numSpeculativeTokens: 3
+
 service:
   type: ClusterIP
   port: 8000

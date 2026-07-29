@@ -12,6 +12,19 @@
 {{- end -}}
 {{- end -}}
 
+{{/* Require an immutable draft-model identity when speculative decoding is enabled. */}}
+{{- define "llm-inference.validateSpeculativeDecoding" -}}
+{{- if .Values.speculativeDecoding.enabled -}}
+{{- $revision := required "speculativeDecoding.draftModel.revision is required when speculative decoding is enabled" .Values.speculativeDecoding.draftModel.revision -}}
+{{- if not (regexMatch "^[0-9a-f]{40}$" $revision) -}}
+{{- fail "speculativeDecoding.draftModel.revision must be a lowercase 40-character Hugging Face commit" -}}
+{{- end -}}
+{{- if lt (int .Values.speculativeDecoding.numSpeculativeTokens) 1 -}}
+{{- fail "speculativeDecoding.numSpeculativeTokens must be at least 1" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Return the chart label without characters that are invalid in a label. */}}
 {{- define "llm-inference.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}

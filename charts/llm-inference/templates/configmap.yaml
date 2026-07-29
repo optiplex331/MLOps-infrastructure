@@ -12,6 +12,10 @@ data:
   max_num_seqs: {{ .Values.serving.maxNumSeqs | quote }}
   max_new_tokens: {{ .Values.serving.maxNewTokens | quote }}
   gpu_memory_utilization: {{ .Values.serving.gpuMemoryUtilization | quote }}
+  speculative_decoding_enabled: {{ .Values.speculativeDecoding.enabled | quote }}
+  speculative_draft_model_id: {{ .Values.speculativeDecoding.draftModel.id | quote }}
+  speculative_draft_model_revision: {{ .Values.speculativeDecoding.draftModel.revision | quote }}
+  speculative_token_count: {{ .Values.speculativeDecoding.numSpeculativeTokens | quote }}
   api_health_path: /health
   api_model_list_path: /v1/models
   api_chat_completions_path: /v1/chat/completions

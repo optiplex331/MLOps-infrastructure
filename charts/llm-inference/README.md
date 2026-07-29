@@ -34,6 +34,25 @@ The image is consumed as `repository@sha256:digest`; tags are not used.
 `max_model_len=4096`, `max_num_seqs=1`, `max_new_tokens=512`, and
 `gpu_memory_utilization=0.85`.
 
+## Speculative decoding experiment
+
+Keep the default AWQ release unchanged. Run the draft-model experiment as a
+separate release and namespace with an exact draft revision:
+
+```sh
+helm upgrade --install llm-inference-speculative ./charts/llm-inference \
+  --namespace llm-inference-speculative \
+  --create-namespace \
+  --set-string model.revision=<40-lowercase-hex-target-commit> \
+  --set-string image.digest=sha256:<64-lowercase-hex> \
+  --set speculativeDecoding.enabled=true \
+  --set-string speculativeDecoding.draftModel.revision=<40-lowercase-hex-draft-commit>
+```
+
+The pinned vLLM build may reject a generic Qwen draft model. Treat that direct
+compatibility failure as an experiment result; do not alter the default
+release or infer acceptance metrics when the server never becomes Ready.
+
 ## Inspect, access, and rollback
 
 The API contract used by the probes and smoke checks is:

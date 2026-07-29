@@ -1,5 +1,6 @@
 {{- include "llm-inference.validateModelRevision" . -}}
 {{- include "llm-inference.validateImage" . -}}
+{{- include "llm-inference.validateSpeculativeDecoding" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -55,6 +56,9 @@ spec:
             - --max-num-seqs={{ .Values.serving.maxNumSeqs }}
             - --gpu-memory-utilization={{ .Values.serving.gpuMemoryUtilization }}
             - --generation-config=vllm
+            {{- if .Values.speculativeDecoding.enabled }}
+            - {{ printf "--speculative-config=%s" (dict "model" .Values.speculativeDecoding.draftModel.id "revision" .Values.speculativeDecoding.draftModel.revision "num_speculative_tokens" (int .Values.speculativeDecoding.numSpeculativeTokens) | toJson) | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
