@@ -1,2 +1,1 @@
-"""Infrastructure-owned release integration."""
-
+"""Support code for the ``llm-inference-lab-infra`` repository boundary."""

@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Check the public surface of llm-inference-lab-infra."""
+
+from pathlib import Path
+import re
+import subprocess
+import sys
+from typing import Optional
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+BLOCKED_DIRECTORY_NAMES = {
+    ".k3s",
+    ".cache",
+    ".runtime",
+    "cache",
+    "caches",
+    "evidence",
+    "host-evidence",
+    "logs",
+    "minio-data",
+    "mlruns",
+    "model-cache",
+    "raw-data",
+    "raw-evaluation",
+    "rendered-secrets",
+    "runtime-evidence",
+    "runtime-logs",
+    "secrets",
+}
+BLOCKED_FILE_NAMES = {
+    "credentials.json",
+    "credentials.yaml",
+    "kubeconfig",
+    "kubeconfig.yaml",
+    "secret.yaml",
+    "secrets.yaml",
+}
+CONTENT_RULES = (
+    (
+        "private key",
+        re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    ),
+    (
+        "credential assignment",
+        re.compile(
+            rb"(?i)(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|secret[_-]?key)"
+            rb"\s*[:=]\s*[\"'][^\"'\r\n]{8,}[\"']"
+        ),
+    ),
+    (
+        "rendered kubeconfig data",
+        re.compile(
+            rb"(?i)(?:certificate-authority-data|client-certificate-data|client-key-data)"
+            rb"\s*:\s*[^\s]+"
+        ),
+    ),
+    (
+        "local path",
+        re.compile(
+            rb"(?<![A-Za-z0-9])/(?:Users|home|root|private/var)/"
+            rb"[^\s`'\"<>]+|[A-Za-z]:\\\\Users\\\\[^\s`'\"<>]+"
+        ),
+    ),
+    (
+        "host identity",
+        re.compile(
+            rb"(?i)\b(?:machine-id|system-uuid|serial(?:-number)?|hostname)"
+            rb"\s*[:=]\s*[^\s,}\]]+"
+        ),
+    ),
+)
+
+
+def publication_files() -> list[Path]:
+    result = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+    )
+    return [Path(name.decode("utf-8")) for name in result.stdout.split(b"\0") if name]
+
+
+def path_violation(relative: Path) -> Optional[str]:
+    if any(part in BLOCKED_DIRECTORY_NAMES for part in relative.parts):
+        return "runtime or private directory"
+    if relative.name in BLOCKED_FILE_NAMES or relative.suffix == ".kubeconfig":
+        return "credential or kubeconfig file"
+    if relative.suffix in {".log", ".trace"}:
+        return "raw runtime log"
+    return None
+
+
+def main() -> int:
+    files = publication_files()
+    violations: list[str] = []
+    for relative in files:
+        reason = path_violation(relative)
+        if reason:
+            violations.append(f"{relative}: {reason}")
+            continue
+        path = REPOSITORY_ROOT / relative
+        if not path.is_file():
+            continue
+        payload = path.read_bytes()
+        for reason, pattern in CONTENT_RULES:
+            if pattern.search(payload):
+                violations.append(f"{relative}: {reason}")
+
+    if violations:
+        print("public surface check failed:", file=sys.stderr)
+        print("\n".join(f"- {violation}" for violation in violations), file=sys.stderr)
+        return 1
+    print(f"public surface check passed ({len(files)} files)")
+    return 0
+
+
+raise SystemExit(main())

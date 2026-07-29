@@ -1,0 +1,4 @@
+# NVIDIA k8s-device-plugin chart 0.17.1
+runtimeClassName: nvidia
+config:
+  name: nvidia-device-plugin-config

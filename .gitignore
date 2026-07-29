@@ -30,4 +30,17 @@ model-cache/
 raw-data/
 raw-evaluation/
 evidence/
+
+# Raw runtime logs, caches, and host evidence must never enter the public tree.
+*.log
+*.trace
+.cache/
+**/.cache/
+caches/
+**/caches/
+logs/
+**/logs/
+host-evidence/
+runtime-evidence/
+runtime-logs/
 out/

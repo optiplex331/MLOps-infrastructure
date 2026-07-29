@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phase 1 Serving Evidence Package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runId", "createdAt", "release", "workload", "requests", "gpu", "limitations"],
+  "properties": {
+    "schemaVersion": {"const": "v1"},
+    "runId": {"type": "string", "minLength": 1},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modelId", "modelRevision", "imageDigest", "chartVersion", "helmRevision"],
+      "properties": {
+        "modelId": {"type": "string", "minLength": 1},
+        "modelRevision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "imageDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "chartVersion": {"type": "string", "minLength": 1},
+        "helmRevision": {"type": "integer", "minimum": 1}
+      }
+    },
+    "workload": {"type": "object", "additionalProperties": true},
+    "requests": {"type": "array", "items": {"type": "object", "additionalProperties": true}},
+    "gpu": {"type": "object", "additionalProperties": true},
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  }
+}

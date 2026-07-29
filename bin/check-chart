@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# CPU-safe Helm contract check for the active Phase 1 chart.
+set -euo pipefail
+
+repository_root=$(cd "$(dirname "$0")/.." && pwd)
+chart="$repository_root/charts/llm-inference"
+revision=0123456789abcdef0123456789abcdef01234567
+digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+command -v helm >/dev/null || {
+  echo 'missing helm; install the pinned Helm client on the validation host' >&2
+  exit 2
+}
+
+helm lint "$chart" \
+  --set-string "model.revision=$revision" \
+  --set-string "image.digest=$digest"
+
+rendered=$(mktemp)
+trap 'rm -f "$rendered"' EXIT
+helm template llm-inference "$chart" \
+  --namespace llm-inference \
+  --set-string "model.revision=$revision" \
+  --set-string "image.digest=$digest" >"$rendered"
+
+grep -Fq 'kind: Deployment' "$rendered"
+grep -Fq 'kind: Service' "$rendered"
+grep -Fq 'kind: PersistentVolumeClaim' "$rendered"
+grep -Fq 'nvidia.com/gpu: "1"' "$rendered"
+grep -Fq 'helm.sh/resource-policy: keep' "$rendered"
+grep -Fq 'automountServiceAccountToken: false' "$rendered"
+grep -Fq 'runAsNonRoot: true' "$rendered"
+
+echo 'active Phase 1 Helm chart checks passed'

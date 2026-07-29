@@ -18,9 +18,74 @@ from .canonical import canonical_json
 from .schema import validate
 
 
-REQUIRED_COMMANDS = ("docker", "k3s", "kubectl", "nvidia-ctk", "nvidia-smi")
+REQUIRED_COMMANDS = (
+    "findmnt",
+    "k3s",
+    "kubectl",
+    "nvidia-ctk",
+    "nvidia-smi",
+    "systemctl",
+)
 REVISION = re.compile(r"^[0-9a-f]{40}$")
 EXPECTED_GPU = "NVIDIA GeForce RTX 3080"
+SANITIZED_OBSERVATION_FIELDS = {
+    "gpu": (
+        "cudaCompatibility",
+        "driverVersion",
+        "model",
+        "powerWatts",
+        "temperatureC",
+        "vramMiB",
+    ),
+    "host": (
+        "accessMethod",
+        "architecture",
+        "cpuLogicalCores",
+        "cpuModel",
+        "filesystem",
+        "freeDiskBytes",
+        "kernel",
+        "operatingSystem",
+        "operatingSystemVersion",
+        "ramBytes",
+    ),
+    "runtime": (
+        "containerRuntime",
+        "devicePluginReady",
+        "k3s",
+        "kubectlClient",
+        "nvidiaToolkit",
+    ),
+    "cluster": (
+        "allocatableGpu",
+        "containerGpuModel",
+        "gpuLimit",
+        "gpuRequest",
+        "nodeLabel",
+        "nodeTaint",
+        "nonGpuOutcome",
+        "podExitCode",
+        "podGpuModel",
+        "schedulingEventReasons",
+        "unavailableGpuOutcome",
+    ),
+    "measurements": (
+        "idleDurationSeconds",
+        "idlePowerWatts",
+        "idleTemperatureC",
+        "smokeGpuMemoryUsedMiB",
+        "smokePowerWatts",
+        "smokeTemperatureC",
+    ),
+}
+GATE_OBSERVATION_SECTIONS = {
+    "native_ubuntu_host": "host",
+    "container_gpu_identity": "cluster",
+    "scheduled_pod_gpu_identity": "cluster",
+    "node_gpu_policy": "cluster",
+    "bounded_scheduling_guards": "cluster",
+    "idle_and_smoke_limits": "measurements",
+}
 
 
 class AdmissionError(ValueError):
@@ -46,7 +111,7 @@ def _ubuntu_release(path: Path = Path("/etc/os-release")) -> dict[str, str]:
 
 def preflight() -> dict[str, str]:
     if platform.system() != "Linux":
-        raise AdmissionError("host admission must run on native Linux; macOS is validation-only")
+        raise AdmissionError("host admission must run on native Linux")
     release = _ubuntu_release()
     if release.get("ID") != "ubuntu":
         raise AdmissionError("host admission target must be native Ubuntu")
@@ -55,7 +120,10 @@ def preflight() -> dict[str, str]:
     missing = [name for name in REQUIRED_COMMANDS if shutil.which(name) is None]
     if missing:
         raise AdmissionError(f"missing required host commands: {missing}")
-    return {"operatingSystem": release.get("NAME", "Ubuntu"), "operatingSystemVersion": release.get("VERSION_ID", "unknown")}
+    return {
+        "operatingSystem": release.get("NAME", "Ubuntu"),
+        "operatingSystemVersion": release.get("VERSION_ID", "unknown"),
+    }
 
 
 def _read_cpu_model() -> str:
@@ -116,7 +184,7 @@ def collect_host(access_method: str) -> dict[str, Any]:
             "vramMiB": int(fields[1]),
         },
         "runtime": {
-            "containerRuntime": _version(("docker", "version", "--format", "{{.Server.Version}}")),
+            "containerRuntime": _version(("k3s", "ctr", "version")),
             "k3s": _version(("k3s", "--version")),
             "kubectlClient": _version(("kubectl", "version", "--client")),
             "nvidiaToolkit": _version(("nvidia-ctk", "--version")),
@@ -127,16 +195,11 @@ def collect_host(access_method: str) -> dict[str, Any]:
 def sanitize(raw: dict[str, Any], revision: str, collected_at: str, limits: dict[str, Any]) -> dict[str, Any]:
     """Copy only reviewable fields; identity, serial, network and credentials drop out."""
     host = raw["host"]
-    gpu = raw["gpu"]
-    runtime = raw["runtime"]
     cluster = raw["cluster"]
     measurements = raw["measurements"]
     observations = {
-        "gpu": {key: gpu[key] for key in ("cudaCompatibility", "driverVersion", "model", "powerWatts", "temperatureC", "vramMiB")},
-        "host": {key: host[key] for key in ("accessMethod", "architecture", "cpuLogicalCores", "cpuModel", "filesystem", "freeDiskBytes", "kernel", "operatingSystem", "operatingSystemVersion", "ramBytes")},
-        "runtime": {key: runtime[key] for key in ("containerRuntime", "devicePluginReady", "k3s", "kubectlClient", "nvidiaToolkit")},
-        "cluster": {key: cluster[key] for key in ("allocatableGpu", "containerGpuModel", "gpuLimit", "gpuRequest", "nodeLabel", "nodeTaint", "nonGpuOutcome", "podExitCode", "podGpuModel", "schedulingEventReasons", "unavailableGpuOutcome")},
-        "measurements": {key: measurements[key] for key in ("idleDurationSeconds", "idlePowerWatts", "idleTemperatureC", "smokeGpuMemoryUsedMiB", "smokePowerWatts", "smokeTemperatureC")},
+        section: {key: raw[section][key] for key in fields}
+        for section, fields in SANITIZED_OBSERVATION_FIELDS.items()
     }
     checks = {
         "native_ubuntu_host": host["operatingSystem"].lower().startswith("ubuntu") and host["architecture"] == "amd64",
@@ -155,7 +218,11 @@ def sanitize(raw: dict[str, Any], revision: str, collected_at: str, limits: dict
         ),
     }
     gates = [
-        {"evidence": [f"observations/{name.replace('native_ubuntu_host', 'host').replace('container_gpu_identity', 'cluster').replace('scheduled_pod_gpu_identity', 'cluster').replace('node_gpu_policy', 'cluster').replace('bounded_scheduling_guards', 'cluster').replace('idle_and_smoke_limits', 'measurements')}"], "gate": name, "status": "passed" if passed else "failed"}
+        {
+            "evidence": [f"observations/{GATE_OBSERVATION_SECTIONS[name]}"],
+            "gate": name,
+            "status": "passed" if passed else "failed",
+        }
         for name, passed in checks.items()
     ]
     return {
@@ -171,7 +238,14 @@ def sanitize(raw: dict[str, Any], revision: str, collected_at: str, limits: dict
         "schemaVersion": "v1",
         "status": "passed" if all(checks.values()) else "failed",
         "synthetic": False,
-        "target": {"architecture": "amd64", "gpuCount": 1, "gpuModel": EXPECTED_GPU, "nodeCount": 1, "operatingSystem": "Ubuntu", "runtime": "native"},
+        "target": {
+            "architecture": "amd64",
+            "gpuCount": 1,
+            "gpuModel": EXPECTED_GPU,
+            "nodeCount": 1,
+            "operatingSystem": "Ubuntu",
+            "runtime": "native",
+        },
     }
 
 

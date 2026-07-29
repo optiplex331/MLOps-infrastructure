@@ -1,0 +1,78 @@
+# The namespace is intentionally a value rather than a chart-owned Namespace.
+# Create it with Helm's --create-namespace flag so uninstall cannot remove it.
+namespace: llm-inference
+fullnameOverride: llm-inference
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/optiplex331/llm-inference-vllm
+  # Selected after the vLLM compatibility smoke test. The chart rejects an
+  # empty or non-sha256 value instead of allowing a mutable image reference.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+model:
+  id: Qwen/Qwen3-4B-AWQ
+  # Selected after the model compatibility smoke test. Must be a lowercase
+  # 40-character Hugging Face commit revision.
+  revision: ""
+
+serving:
+  maxModelLen: 4096
+  maxNumSeqs: 1
+  maxNewTokens: 512
+  gpuMemoryUtilization: 0.85
+
+service:
+  type: ClusterIP
+  port: 8000
+
+persistence:
+  storageClassName: local-path
+  accessMode: ReadWriteOnce
+  size: 20Gi
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 4Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "4"
+    memory: 8Gi
+    nvidia.com/gpu: "1"
+
+nodeSelector:
+  kubernetes.io/arch: amd64
+  mlops.local/gpu: rtx-3080
+
+tolerations:
+  - key: mlops.local/gpu
+    operator: Equal
+    value: dedicated
+    effect: NoSchedule
+
+runtimeClassName: nvidia
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+probes:
+  startup:
+    failureThreshold: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+  readiness:
+    failureThreshold: 6
+    periodSeconds: 5
+    timeoutSeconds: 5
+  liveness:
+    failureThreshold: 3
+    periodSeconds: 10
+    timeoutSeconds: 5

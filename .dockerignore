@@ -1,0 +1,14 @@
+.git
+.github
+runtime
+platform
+workflows
+observability
+tests
+__pycache__
+*.py[cod]
+evidence
+logs
+model-cache
+raw-data
+secrets

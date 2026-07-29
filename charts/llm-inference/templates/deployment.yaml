@@ -1,0 +1,112 @@
+{{- include "llm-inference.validateModelRevision" . -}}
+{{- include "llm-inference.validateImage" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "llm-inference.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "llm-inference.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/release-name: {{ .Release.Name | quote }}
+    helm.sh/release-namespace: {{ .Release.Namespace | quote }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "llm-inference.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "llm-inference.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+      annotations:
+        helm.sh/release-name: {{ .Release.Name | quote }}
+        helm.sh/release-namespace: {{ .Release.Namespace | quote }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "llm-inference.fullname" . }}
+      automountServiceAccountToken: false
+      runtimeClassName: {{ .Values.runtimeClassName }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: vllm
+          image: {{ .Values.image.repository }}@{{ .Values.image.digest }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - vllm
+          args:
+            - serve
+            - {{ .Values.model.id | quote }}
+            - --revision={{ .Values.model.revision }}
+            - --served-model-name={{ .Values.model.id }}
+            - --host=0.0.0.0
+            - --port={{ .Values.service.port }}
+            - --download-dir=/cache/huggingface
+            - --max-model-len={{ .Values.serving.maxModelLen }}
+            - --max-num-seqs={{ .Values.serving.maxNumSeqs }}
+            - --gpu-memory-utilization={{ .Values.serving.gpuMemoryUtilization }}
+            - --generation-config=vllm
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: HF_HOME
+              value: /cache/huggingface
+            - name: HF_HUB_CACHE
+              value: /cache/huggingface/hub
+            - name: VLLM_CACHE_ROOT
+              value: /cache/vllm
+          volumeMounts:
+            - name: model-cache
+              mountPath: /cache
+            - name: serving-config
+              mountPath: /etc/llm-inference
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /v1/models
+              port: http
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: {{ include "llm-inference.fullname" . }}-model-cache
+        - name: serving-config
+          configMap:
+            name: {{ include "llm-inference.fullname" . }}

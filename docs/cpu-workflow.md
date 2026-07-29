@@ -1,4 +1,10 @@
-# CPU-only Argo, MLflow, and MinIO Workflow
+# Historical CPU-only Argo, MLflow, and MinIO Workflow
+
+> Historical notice: this document and the files it describes are retained
+> for provenance from the former release-lab surface. They are not the active
+> Phase 1 path for `llm-inference-lab-infra`, and the default CI workflow does
+> not render them. Use [platform-boundary.md](platform-boundary.md) for the
+> current single-node k3s/NVIDIA/Helm/vLLM boundary.
 
 Ticket 04 defines a namespace-scoped, bounded synthetic release workflow. The
 platform modules use local-path persistence explicitly annotated `lab-only`,

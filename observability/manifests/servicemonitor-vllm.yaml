@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: llm-inference-vllm
+  labels:
+    app.kubernetes.io/part-of: llm-inference-lab
+spec:
+  namespaceSelector:
+    matchNames:
+      - llm-inference
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: llm-inference
+      app.kubernetes.io/instance: llm-inference
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

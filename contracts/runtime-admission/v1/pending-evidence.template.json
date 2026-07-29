@@ -1,0 +1,27 @@
+{
+  "admissionId": "rtx3080-single-node-k3s-v1",
+  "checks": [
+    {"action": "Run the host tool inventory on the native Ubuntu host.", "evidence": [], "name": "host_tools", "status": "pending"},
+    {"action": "Run nvidia-smi and record the allowlisted GPU identity fields.", "evidence": [], "name": "host_gpu", "status": "pending"},
+    {"action": "Run the container-level nvidia-smi smoke command.", "evidence": [], "name": "container_gpu", "status": "pending"},
+    {"action": "Run the k3s packaged-component verification script.", "evidence": [], "name": "k3s_components", "status": "pending"},
+    {"action": "Run the k3s containerd toolkit configurator.", "evidence": [], "name": "containerd_nvidia_runtime", "status": "pending"},
+    {"action": "Apply the device-plugin manifest and record readiness.", "evidence": [], "name": "device_plugin", "status": "pending"},
+    {"action": "Apply gpu-smoke.pod.yaml and record its exit code and GPU model.", "evidence": [], "name": "gpu_smoke", "status": "pending"},
+    {"action": "Record free disk bytes and compare them with host-admission-limits.v1.json.", "evidence": [], "name": "storage_headroom", "status": "pending"}
+  ],
+  "collectedAt": null,
+  "excludedFields": ["credentials", "gpuSerial", "hostPaths", "hostnames", "kubeconfig", "privateAddresses"],
+  "infrastructureRevision": "${INFRASTRUCTURE_REVISION}",
+  "limitations": [
+    "Pending execution on the declared native-Ubuntu single-node RTX 3080 workstation.",
+    "This template is not runtime evidence and makes no production, high-availability, multi-node, or autoscaling claim."
+  ],
+  "limitsReference": "config/host-admission-limits.v1.json",
+  "profileId": "rtx3080-single-node-k3s-v1",
+  "runtime": null,
+  "schemaVersion": "v1",
+  "sensitiveFieldsExcluded": true,
+  "status": "pending",
+  "synthetic": false
+}

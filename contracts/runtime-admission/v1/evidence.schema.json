@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "admissionId": {"const": "rtx3080-single-node-k3s-v1"},
+    "collectedAt": {"oneOf": [{"format": "date-time", "type": "string"}, {"type": "null"}]},
+    "checks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {"minLength": 1, "type": "string"},
+          "evidence": {"items": {"type": "string"}, "type": "array"},
+          "name": {"enum": ["host_tools", "host_gpu", "container_gpu", "k3s_components", "containerd_nvidia_runtime", "device_plugin", "gpu_smoke", "storage_headroom"]},
+          "status": {"enum": ["pending", "passed", "failed"]}
+        },
+        "required": ["name", "status", "evidence", "action"],
+        "type": "object"
+      },
+      "minItems": 8,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "excludedFields": {"items": {"type": "string"}, "minItems": 1, "type": "array", "uniqueItems": true},
+    "infrastructureRevision": {"oneOf": [{"pattern": "^[0-9a-f]{40}$", "type": "string"}, {"const": "${INFRASTRUCTURE_REVISION}"}]},
+    "limitations": {"items": {"minLength": 1, "type": "string"}, "minItems": 1, "type": "array", "uniqueItems": true},
+    "limitsReference": {"const": "config/host-admission-limits.v1.json"},
+    "profileId": {"const": "rtx3080-single-node-k3s-v1"},
+    "runtime": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "additionalProperties": false,
+          "properties": {
+            "container": {
+              "additionalProperties": false,
+              "properties": {
+                "gpuModel": {"const": "NVIDIA GeForce RTX 3080"},
+                "status": {"const": "passed"}
+              },
+              "required": ["gpuModel", "status"],
+              "type": "object"
+            },
+            "devicePlugin": {
+              "additionalProperties": false,
+              "properties": {
+                "allocatableGpu": {"const": 1},
+                "chartVersion": {"const": "0.17.1"},
+                "ready": {"const": true}
+              },
+              "required": ["chartVersion", "ready", "allocatableGpu"],
+              "type": "object"
+            },
+            "gpu": {
+              "additionalProperties": false,
+              "properties": {
+                "cudaCompatibility": {"minLength": 1, "type": "string"},
+                "driverVersion": {"minLength": 1, "type": "string"},
+                "model": {"const": "NVIDIA GeForce RTX 3080"},
+                "vramMiB": {"minimum": 1, "type": "integer"}
+              },
+              "required": ["model", "driverVersion", "cudaCompatibility", "vramMiB"],
+              "type": "object"
+            },
+            "host": {
+              "additionalProperties": false,
+              "properties": {
+                "architecture": {"const": "amd64"},
+                "freeDiskBytes": {"minimum": 1, "type": "integer"},
+                "operatingSystem": {"const": "Ubuntu"},
+                "ramBytes": {"minimum": 1, "type": "integer"}
+              },
+              "required": ["operatingSystem", "architecture", "freeDiskBytes", "ramBytes"],
+              "type": "object"
+            },
+            "k3s": {
+              "additionalProperties": false,
+              "properties": {
+                "containerRuntime": {"const": "embedded-containerd"},
+                "localPathReady": {"const": true},
+                "metricsServerReady": {"const": true},
+                "nodeCount": {"const": 1},
+                "serviceLBDisabled": {"const": true},
+                "traefikDisabled": {"const": true},
+                "version": {"pattern": "^v1\\.32\\.", "type": "string"}
+              },
+              "required": ["version", "containerRuntime", "nodeCount", "localPathReady", "metricsServerReady", "traefikDisabled", "serviceLBDisabled"],
+              "type": "object"
+            },
+            "smoke": {
+              "additionalProperties": false,
+              "properties": {
+                "cudaVisible": {"const": true},
+                "exitCode": {"const": 0},
+                "gpuModel": {"const": "NVIDIA GeForce RTX 3080"},
+                "namespace": {"const": "mlops-runtime-admission"},
+                "podName": {"const": "gpu-smoke"}
+              },
+              "required": ["namespace", "podName", "gpuModel", "cudaVisible", "exitCode"],
+              "type": "object"
+            },
+            "toolkit": {
+              "additionalProperties": false,
+              "properties": {
+                "containerdConfigApplied": {"const": true},
+                "version": {"pattern": "^1\\.17\\.8", "type": "string"}
+              },
+              "required": ["version", "containerdConfigApplied"],
+              "type": "object"
+            }
+          },
+          "required": ["host", "gpu", "toolkit", "k3s", "devicePlugin", "container", "smoke"],
+          "type": "object"
+        }
+      ]
+    },
+    "schemaVersion": {"const": "v1"},
+    "sensitiveFieldsExcluded": {"const": true},
+    "status": {"enum": ["pending", "passed", "failed"]},
+    "synthetic": {"const": false}
+  },
+  "required": ["schemaVersion", "admissionId", "profileId", "status", "synthetic", "infrastructureRevision", "collectedAt", "runtime", "checks", "limitations", "limitsReference", "sensitiveFieldsExcluded", "excludedFields"],
+  "type": "object"
+}

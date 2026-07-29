@@ -9,18 +9,17 @@ usage() {
 [[ $# -eq 2 && "$1" == "--output" ]] || usage
 output_path=$2
 [[ "$output_path" = /* ]] || { echo "output path must be absolute" >&2; exit 2; }
-[[ "$(uname -s)" == "Linux" ]] || { echo "cluster admission requires native Ubuntu; macOS is validation-only" >&2; exit 2; }
+[[ "$(uname -s)" == "Linux" ]] || { echo "cluster admission requires native Ubuntu" >&2; exit 2; }
 grep -Eq '^ID=\"?ubuntu\"?$' /etc/os-release || { echo "cluster admission requires Ubuntu" >&2; exit 2; }
 
 repository_root=$(cd "$(dirname "$0")/.." && pwd)
 manifest_root="$repository_root/manifests/host-admission"
 limits="$repository_root/config/host-admission-limits.v1.json"
-image='nvidia/cuda@sha256:8767a245ed2c481eb245d8f6c625accc3788e1fb8612403d6b4cd4645a4f09c7'
 namespace=mlops-host-admission
 timeout_seconds=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["schedulingTimeoutSeconds"])' "$limits")
 idle_seconds=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["idleSampleSeconds"])' "$limits")
 
-for command in docker kubectl nvidia-smi python3; do
+for command in k3s kubectl nvidia-smi python3; do
   command -v "$command" >/dev/null || { echo "missing required command: $command" >&2; exit 2; }
 done
 
@@ -39,9 +38,6 @@ kubectl taint node "$node" mlops.local/gpu=dedicated:NoSchedule --overwrite >/de
 allocatable=$(kubectl get node "$node" -o jsonpath='{.status.allocatable.nvidia\.com/gpu}')
 [[ "$allocatable" == "1" ]] || { echo "expected exactly one allocatable nvidia.com/gpu" >&2; exit 2; }
 
-container_gpu=$(docker run --rm --gpus all "$image" nvidia-smi --query-gpu=name --format=csv,noheader | tr -d '\r')
-[[ "$container_gpu" == "NVIDIA GeForce RTX 3080" ]] || { echo "container did not identify the expected RTX 3080" >&2; exit 2; }
-
 idle_start=$(nvidia-smi --query-gpu=temperature.gpu,power.draw --format=csv,noheader,nounits)
 sleep "$idle_seconds"
 idle_end=$(nvidia-smi --query-gpu=temperature.gpu,power.draw --format=csv,noheader,nounits)
@@ -50,6 +46,8 @@ kubectl apply -f "$manifest_root/gpu-smoke.pod.yaml" >/dev/null
 kubectl wait -n "$namespace" --for=jsonpath='{.status.phase}'=Succeeded pod/gpu-smoke --timeout=120s >/dev/null
 pod_gpu=$(kubectl logs -n "$namespace" gpu-smoke | cut -d, -f1 | xargs)
 pod_exit=$(kubectl get pod -n "$namespace" gpu-smoke -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}')
+container_gpu="$pod_gpu"
+[[ "$container_gpu" == "NVIDIA GeForce RTX 3080" ]] || { echo "Kubernetes container did not identify the expected RTX 3080" >&2; exit 2; }
 smoke_sample=$(nvidia-smi --query-gpu=temperature.gpu,power.draw,memory.used --format=csv,noheader,nounits)
 
 kubectl apply -f "$manifest_root/non-gpu-guard.pod.yaml" >/dev/null

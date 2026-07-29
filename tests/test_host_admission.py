@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 import json
-import platform
-import subprocess
-import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -32,7 +28,7 @@ class HostAdmissionTests(unittest.TestCase):
         self.assertEqual(template["status"], "pending")
         self.assertFalse(template["synthetic"])
         self.assertTrue(all(gate["status"] == "pending" for gate in template["gates"]))
-        self.assertIn("macOS", " ".join(template["limitations"]))
+        self.assertIn("Hosted CI", " ".join(template["limitations"]))
 
     def test_gpu_manifests_pin_image_and_request_exactly_one_gpu(self) -> None:
         for name in ("gpu-smoke", "gpu-capacity-holder", "gpu-capacity-contender"):
@@ -119,43 +115,10 @@ class HostAdmissionTests(unittest.TestCase):
         self.assertEqual(evidence["status"], "passed")
         validate(evidence, load("contracts/host-admission/v1/evidence.schema.json"))
 
-    def test_collector_rejects_current_macos_validation_host(self) -> None:
-        if platform.system() != "Darwin":
-            self.skipTest("this assertion is specific to the current validation host")
-        revision = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "host-admission.json"
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "bin/collect-host-admission",
-                    "--access-method",
-                    "local-console",
-                    "--cluster-results",
-                    "/nonexistent",
-                    "--infrastructure-revision",
-                    revision,
-                    "--output",
-                    str(output),
-                ],
-                cwd=ROOT,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(result.returncode, 2)
-            self.assertFalse(output.exists())
-
     def test_preflight_cannot_accept_non_linux(self) -> None:
         from mlops_infrastructure.host_admission import preflight
 
-        with patch("platform.system", return_value="Darwin"):
+        with patch("platform.system", return_value="Windows"):
             with self.assertRaisesRegex(AdmissionError, "native Linux"):
                 preflight()
 

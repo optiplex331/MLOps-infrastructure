@@ -46,11 +46,12 @@ class RepositoryBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(result.stdout.splitlines(), dangerous)
 
-    def test_ticket_one_contains_no_platform_or_model_artifacts(self) -> None:
-        forbidden_suffixes = {".kubeconfig", ".pem", ".key", ".safetensors", ".pt"}
-        files = [path for path in ROOT.rglob("*") if path.is_file() and ".git" not in path.parts]
-        self.assertFalse([path for path in files if path.suffix in forbidden_suffixes])
-        self.assertFalse([path for path in files if path.name == "Chart.yaml"])
+    def test_historical_surface_is_separate_from_the_phase_one_chart(self) -> None:
+        self.assertTrue((ROOT / "charts" / "llm-inference" / "Chart.yaml").is_file())
+        self.assertIn(
+            "historical",
+            (ROOT / "platform" / "README.md").read_text(encoding="utf-8").lower(),
+        )
 
     def test_license_is_present(self) -> None:
         self.assertIn("MIT License", (ROOT / "LICENSE").read_text(encoding="utf-8"))
