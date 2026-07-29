@@ -23,8 +23,9 @@ repository.
 
 The repository contains the runtime admission procedure, minimal serving
 chart, wrapper-image workflow, observability resources, and rollback commands.
-The exact model revision, image digest, and live GPU evidence remain pending
-until the remote host completes the compatibility and admission checks.
+The exact model revisions, image digest, live admission, benchmark, IFEval,
+rollback, and optional-experiment outcomes are recorded in
+[the Phase 1 results](docs/results/phase-1-llm-inference-results.md).
 
 See [OWNERSHIP.md](OWNERSHIP.md) for the repository and publication boundary.
 See [docs/platform-boundary.md](docs/platform-boundary.md) for the active and
