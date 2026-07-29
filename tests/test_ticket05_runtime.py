@@ -18,12 +18,14 @@ def load(relative: str) -> dict:
 class Ticket05RuntimeTests(unittest.TestCase):
     def test_profile_pins_one_runtime_shape(self) -> None:
         profile = load("config/runtime-admission-profile.v1.json")
+        limits = load("config/host-admission-limits.v1.json")
         self.assertEqual(profile["k3s"]["version"], "v1.32.6+k3s1")
         self.assertEqual(profile["k3s"]["containerRuntime"], "embedded-containerd")
         self.assertEqual(profile["k3s"]["retainedComponents"], ["local-path", "metrics-server"])
         self.assertEqual(profile["k3s"]["disabledComponents"], ["traefik", "servicelb"])
         self.assertEqual(profile["host"]["gpuCount"], 1)
         self.assertEqual(profile["host"]["gpuModel"], "NVIDIA GeForce RTX 3080")
+        self.assertEqual(limits["minimumFreeDiskBytes"], 50 * 1024**3)
 
     def test_k3s_installation_keeps_required_addons_and_disables_only_network_addons(self) -> None:
         installer = (ROOT / "runtime/k3s/install-single-node.sh").read_text(encoding="utf-8")
