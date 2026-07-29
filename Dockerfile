@@ -15,6 +15,13 @@ LABEL org.opencontainers.image.title="llm-inference-lab vLLM wrapper" \
       io.llm-inference-lab.model-profile="${MODEL_PROFILE}" \
       io.llm-inference-lab.build-timestamp="${BUILD_TIMESTAMP}"
 
+RUN if ! getent group 1000 >/dev/null; then groupadd --gid 1000 vllm-lab; fi \
+    && if ! getent passwd 1000 >/dev/null; then \
+         useradd --uid 1000 --gid 1000 --no-create-home --home-dir /tmp \
+           --shell /usr/sbin/nologin vllm-lab; \
+       fi
+
+ENV HOME=/tmp
 USER 1000:1000
 ENTRYPOINT ["vllm"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

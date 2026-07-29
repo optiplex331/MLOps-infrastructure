@@ -56,6 +56,13 @@ class RepositoryBoundaryTests(unittest.TestCase):
     def test_license_is_present(self) -> None:
         self.assertIn("MIT License", (ROOT / "LICENSE").read_text(encoding="utf-8"))
 
+    def test_wrapper_declares_its_non_root_identity(self) -> None:
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("getent passwd 1000", dockerfile)
+        self.assertIn("useradd --uid 1000 --gid 1000", dockerfile)
+        self.assertIn("ENV HOME=/tmp", dockerfile)
+        self.assertIn("USER 1000:1000", dockerfile)
+
     def test_publishable_files_do_not_contain_representative_secrets(self) -> None:
         result = subprocess.run(
             ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
