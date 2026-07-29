@@ -43,6 +43,8 @@ separate release and namespace with an exact draft revision:
 helm upgrade --install llm-inference-speculative ./charts/llm-inference \
   --namespace llm-inference-speculative \
   --create-namespace \
+  --set-string namespace=llm-inference-speculative \
+  --set-string fullnameOverride=llm-inference-speculative \
   --set-string model.revision=<40-lowercase-hex-target-commit> \
   --set-string image.digest=sha256:<64-lowercase-hex> \
   --set speculativeDecoding.enabled=true \

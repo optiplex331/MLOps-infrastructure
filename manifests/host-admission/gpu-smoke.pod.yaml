@@ -5,6 +5,7 @@
   "spec": {
     "activeDeadlineSeconds": 120,
     "automountServiceAccountToken": false,
+    "securityContext": {"runAsNonRoot": true, "seccompProfile": {"type": "RuntimeDefault"}},
     "containers": [{
       "args": ["--query-gpu=name,memory.total,driver_version,temperature.gpu,power.draw", "--format=csv,noheader,nounits"],
       "command": ["nvidia-smi"],
