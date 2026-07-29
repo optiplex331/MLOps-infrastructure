@@ -51,6 +51,11 @@ class Ticket05RuntimeTests(unittest.TestCase):
         self.assertIn("failOnInitError: true", manifest)
         self.assertIn("runtimeClassName: nvidia", values)
         self.assertIn("name: nvidia-device-plugin-config", values)
+        self.assertIn("affinity: null", values)
+        self.assertIn("key: mlops.local/gpu", values)
+        self.assertIn("effect: NoSchedule", values)
+        self.assertIn("affinity: null", manifest)
+        self.assertIn("key: mlops.local/gpu", manifest)
         self.assertNotIn(":latest", manifest + values)
 
     def test_pending_evidence_is_sanitized_and_validates(self) -> None:

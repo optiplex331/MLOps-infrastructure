@@ -1,4 +1,15 @@
 # NVIDIA k8s-device-plugin chart 0.17.1
 runtimeClassName: nvidia
+affinity: null
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+  - key: mlops.local/gpu
+    operator: Equal
+    value: dedicated
+    effect: NoSchedule
 config:
   name: nvidia-device-plugin-config
