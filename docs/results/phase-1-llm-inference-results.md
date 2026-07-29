@@ -10,7 +10,7 @@ kubeconfig, model weights, caches, and host identity remain outside Git.
 | --- | --- |
 | Project source | `880a1d0592368b18c7c5e1409e9d724e28aaa391` |
 | Infrastructure source | `c048f1392c9acb837f34e86e24549630d885698d` |
-| Serving image | `ghcr.io/optiplex331/llm-inference-lab-vllm@sha256:8c3465f2b686f526ac797d17e80f6b220563974e31136d7eb609bea4ecdfc75c` |
+| Serving image | `ghcr.io/optiplex331/llm-inference-vllm@sha256:8c3465f2b686f526ac797d17e80f6b220563974e31136d7eb609bea4ecdfc75c` |
 | Official vLLM base | v0.13.0, `sha256:d623253f2ba246378421c9642e20885e65257f38418ff26d48c81aea1702521b` |
 | AWQ target | `Qwen/Qwen3-4B-AWQ@74d4bd2bd4bff9cafc9345221320bffb08b406a3` |
 | FP target | `Qwen/Qwen3-4B@1cfa9a7208912126459214e8b04321603b3df60c` |
