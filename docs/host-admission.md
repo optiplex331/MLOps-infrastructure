@@ -29,6 +29,11 @@ idle and smoke measurements against the checked-in stop limits. The collector
 accepts only native amd64 Ubuntu and allowlists reviewable fields, excluding
 hostnames, addresses, serials, credentials, and kubeconfig content.
 
+The k3s installer creates the dedicated `mlops-runtime` group, adds `zeng`,
+and configures `/etc/rancher/k3s/k3s.yaml` as group-readable `0640` through
+`write-kubeconfig-mode` and `write-kubeconfig-group`. This permits ordinary
+user `kubectl` and Helm access without reading the k3s containerd socket.
+
 `contracts/host-admission/v1/pending-evidence.template.json` is a pending
 template, not execution evidence. Hosted CI runs validate only contracts,
 manifests, sanitization, and failure behavior. This lab makes no
