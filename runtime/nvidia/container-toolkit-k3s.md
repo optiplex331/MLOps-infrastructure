@@ -40,9 +40,12 @@ Verify the host and container path before scheduling a Pod:
 ```sh
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits
 nvidia-ctk --version
-sudo k3s ctr version
+kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}'
 ```
 
-Record the command outputs in the sanitized evidence contract. Do not publish
+The host-admission collector reads the container runtime version from the
+Kubernetes Node status, so routine collection does not require root access to
+the k3s containerd socket. Record the command outputs in the sanitized
+evidence contract. Do not publish
 the kubeconfig, hostnames, GPU serials, private addresses, or raw containerd
 configuration.

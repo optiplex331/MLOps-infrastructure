@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mlops_infrastructure.host_admission import AdmissionError, sanitize
+from mlops_infrastructure.host_admission import AdmissionError, _container_runtime_version, sanitize
 from mlops_infrastructure.schema import validate
 
 
@@ -21,6 +21,28 @@ def load(path: str) -> dict:
 
 
 class HostAdmissionTests(unittest.TestCase):
+    def test_container_runtime_version_comes_from_kubernetes_node_status(self) -> None:
+        node_payload = {
+            "items": [
+                {
+                    "status": {
+                        "nodeInfo": {
+                            "containerRuntimeVersion": "containerd://1.7.15-k3s1",
+                        }
+                    }
+                }
+            ]
+        }
+        with patch(
+            "mlops_infrastructure.host_admission._run",
+            return_value=json.dumps(node_payload),
+        ) as run:
+            self.assertEqual(
+                _container_runtime_version(),
+                "containerd://1.7.15-k3s1",
+            )
+        run.assert_called_once_with("kubectl", "get", "nodes", "-o", "json")
+
     def test_pending_contract_is_explicitly_not_evidence(self) -> None:
         template = load("contracts/host-admission/v1/pending-evidence.template.json")
         schema = load("contracts/host-admission/v1/evidence.schema.json")

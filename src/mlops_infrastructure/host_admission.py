@@ -145,6 +145,22 @@ def _version(command: tuple[str, ...]) -> str:
     return output.splitlines()[0][:200]
 
 
+def _container_runtime_version() -> str:
+    try:
+        nodes = json.loads(_run("kubectl", "get", "nodes", "-o", "json"))["items"]
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise AdmissionError("Kubernetes node runtime information is unavailable") from exc
+    if len(nodes) != 1:
+        raise AdmissionError("exactly one Kubernetes node is required")
+    try:
+        version = nodes[0]["status"]["nodeInfo"]["containerRuntimeVersion"]
+    except (KeyError, TypeError) as exc:
+        raise AdmissionError("Kubernetes node container runtime version is unavailable") from exc
+    if not isinstance(version, str) or not version:
+        raise AdmissionError("Kubernetes node container runtime version is invalid")
+    return version[:200]
+
+
 def collect_host(access_method: str) -> dict[str, Any]:
     release = preflight()
     gpu_fields = _run(
@@ -184,7 +200,7 @@ def collect_host(access_method: str) -> dict[str, Any]:
             "vramMiB": int(fields[1]),
         },
         "runtime": {
-            "containerRuntime": _version(("k3s", "ctr", "version")),
+            "containerRuntime": _container_runtime_version(),
             "k3s": _version(("k3s", "--version")),
             "kubectlClient": _version(("kubectl", "version", "--client")),
             "nvidiaToolkit": _version(("nvidia-ctk", "--version")),

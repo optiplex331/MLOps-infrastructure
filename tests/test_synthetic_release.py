@@ -11,7 +11,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_SOURCE = Path(os.environ.get("MLOPS_PROJECT_REPO", ROOT.parent / "MLOps"))
+PROJECT_SOURCE = Path(os.environ.get("MLOPS_PROJECT_REPO", ROOT.parent / "llm-inference-lab"))
 REQUEST_RELATIVE = Path("fixtures/releases/rejected/release-request.template.json")
 
 
@@ -35,8 +35,8 @@ def initialize(repo: Path) -> str:
 
 class Repositories:
     def __init__(self, root: Path) -> None:
-        self.infrastructure = root / "MLOps-infrastructure"
-        self.project = root / "MLOps"
+        self.infrastructure = root / "llm-inference-lab-infra"
+        self.project = root / "llm-inference-lab"
         shutil.copytree(
             ROOT,
             self.infrastructure,
