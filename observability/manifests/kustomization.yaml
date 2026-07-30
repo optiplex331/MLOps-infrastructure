@@ -3,5 +3,11 @@ kind: Kustomization
 namespace: monitoring
 resources:
   - servicemonitor-vllm.yaml
-  - prometheus-rules.yaml
-  - grafana-dashboard.yaml
+configMapGenerator:
+  - name: llm-inference-dashboard
+    files:
+      - llm-inference.json=dashboard.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"

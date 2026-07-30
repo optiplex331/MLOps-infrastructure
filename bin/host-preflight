@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Read-only facts required before running the single-node GPU smoke workload.
+set -uo pipefail
+
+status=0
+
+report() {
+  printf '%-24s %s\n' "$1:" "$2"
+}
+
+missing() {
+  report "$1" "unavailable"
+  status=1
+}
+
+if [[ "$(uname -s)" == "Linux" && -r /etc/os-release ]]; then
+  operating_system=$(. /etc/os-release; printf '%s %s' "${NAME:-unknown}" "${VERSION_ID:-unknown}")
+  report "host" "$operating_system $(uname -m)"
+else
+  missing "host"
+fi
+
+if command -v findmnt >/dev/null; then
+  report "root filesystem" "$(findmnt -n -o FSTYPE / 2>/dev/null || printf unavailable)"
+  report "root disk available" "$(df -B1 --output=avail / 2>/dev/null | tail -n 1 | tr -d ' ') bytes"
+else
+  missing "root filesystem"
+  missing "root disk available"
+fi
+
+if [[ -r /proc/meminfo ]]; then
+  report "memory total" "$(awk '/^MemTotal:/ { printf "%d bytes", $2 * 1024 }' /proc/meminfo)"
+else
+  missing "memory total"
+fi
+
+if command -v nvidia-smi >/dev/null; then
+  gpu_facts=$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits 2>/dev/null) || gpu_facts=
+  [[ -n "$gpu_facts" ]] && report "driver and GPU" "$gpu_facts" || missing "driver and GPU"
+else
+  missing "driver and GPU"
+fi
+
+if command -v k3s >/dev/null; then
+  report "k3s" "$(k3s --version 2>/dev/null | head -n 1)"
+else
+  missing "k3s"
+fi
+
+if command -v kubectl >/dev/null; then
+  node_json=$(kubectl get nodes -o json 2>/dev/null) || node_json=
+  if [[ -n "$node_json" ]]; then
+    facts=$(python3 -c '
+import json, sys
+items = json.load(sys.stdin).get("items", [])
+if len(items) != 1:
+    raise SystemExit(1)
+status = items[0].get("status", {})
+print(status.get("nodeInfo", {}).get("containerRuntimeVersion", "unavailable"))
+print(status.get("allocatable", {}).get("nvidia.com/gpu", "0"))
+' <<<"$node_json" 2>/dev/null) || facts=
+    if [[ -n "$facts" ]]; then
+      report "container runtime" "$(sed -n '1p' <<<"$facts")"
+      report "allocatable GPU" "$(sed -n '2p' <<<"$facts")"
+    else
+      missing "container runtime"
+      missing "allocatable GPU"
+    fi
+  else
+    missing "container runtime"
+    missing "allocatable GPU"
+  fi
+
+  plugin_ready=$(kubectl -n nvidia-device-plugin get pods \
+    -l app.kubernetes.io/name=nvidia-device-plugin \
+    -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' \
+    2>/dev/null) || plugin_ready=
+  if grep -qx true <<<"$plugin_ready"; then
+    report "device plugin" "ready"
+  else
+    missing "device plugin"
+  fi
+else
+  missing "container runtime"
+  missing "device plugin"
+  missing "allocatable GPU"
+fi
+
+exit "$status"

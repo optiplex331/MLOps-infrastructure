@@ -107,10 +107,10 @@ scheduler, or a production vLLM connector.
 
 ## Verification and limitations
 
-The Project clean checkout passed 22 CPU-only tests. The Infrastructure clean
-checkout passed `bin/check-ci`: public-surface validation, Helm lint/template,
-five host-admission tests, six repository-boundary tests, and five runtime
-tests. The final live admission and restored AWQ deployment also passed.
+The Project clean checkout passed 22 CPU-only tests. The Infrastructure
+checkout passed the then-current `bin/check-ci` suite. Historical admission
+test counts are intentionally not part of the current interface. The final
+live GPU smoke and restored AWQ deployment passed.
 
 k3s v1.32 was retained because it is the Phase 1 pin, but it is end-of-life and
 must be upgraded before this lab is used as a foundation for maintained or

@@ -64,6 +64,8 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
+            - name: HOME
+              value: /tmp
             - name: HF_HOME
               value: /cache/huggingface
             - name: HF_HUB_CACHE
@@ -80,9 +82,6 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
             capabilities:
               drop:
                 - ALL

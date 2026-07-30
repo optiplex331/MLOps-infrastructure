@@ -6,11 +6,11 @@ repository_root=$(cd "$(dirname "$0")/.." && pwd)
 
 "$repository_root/bin/check-public-surface"
 "$repository_root/bin/check-chart"
+"$repository_root/bin/check-host-path"
+"$repository_root/bin/check-observability"
 
 for test_file in \
-  test_host_admission.py \
-  test_repository_boundaries.py \
-  test_ticket05_runtime.py
+  test_repository_boundaries.py
 do
   PYTHONPATH="$repository_root/src" python3 -m unittest discover \
     -s "$repository_root/tests" -p "$test_file" -v

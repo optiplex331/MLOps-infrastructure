@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# CPU-safe, offline validation for host setup scripts and GPU smoke manifests.
+set -euo pipefail
+
+repository_root=$(cd "$(dirname "$0")/.." && pwd)
+
+for script in \
+  "$repository_root/bin/host-preflight" \
+  "$repository_root/bin/run-gpu-smoke" \
+  "$repository_root/runtime/k3s/install-single-node.sh" \
+  "$repository_root/runtime/nvidia/configure-k3s-containerd.sh"
+do
+  bash -n "$script"
+done
+
+python3 - "$repository_root" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+namespace = json.loads((root / "manifests/gpu-smoke/namespace.yaml").read_text())
+pod = json.loads((root / "manifests/gpu-smoke/pod.yaml").read_text())
+plugin = json.loads((root / "runtime/nvidia/device-plugin.yaml").read_text())
+
+assert namespace["kind"] == "Namespace"
+assert namespace["metadata"]["name"] == "llm-inference-gpu-smoke"
+assert pod["apiVersion"] == "v1" and pod["kind"] == "Pod"
+assert pod["metadata"]["namespace"] == namespace["metadata"]["name"]
+assert pod["spec"]["restartPolicy"] == "Never"
+container = pod["spec"]["containers"][0]
+assert container["command"] == ["nvidia-smi"]
+assert "@sha256:" in container["image"] and ":latest" not in container["image"]
+assert container["resources"]["requests"]["nvidia.com/gpu"] == "1"
+assert container["resources"]["limits"]["nvidia.com/gpu"] == "1"
+assert plugin["kind"] == "HelmChart"
+assert plugin["spec"]["version"] == "0.17.1"
+PY

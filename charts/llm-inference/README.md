@@ -6,7 +6,8 @@ This chart owns one Helm release for the Phase 1 single-node k3s lab:
 - one `Recreate` Deployment replica requesting exactly one `nvidia.com/gpu`;
 - one `ClusterIP` Service on port `8000`;
 - one `local-path` `ReadWriteOnce` model-cache PVC requesting `20Gi`;
-- one least-privilege ServiceAccount with token automount disabled.
+- one least-privilege ServiceAccount with token automount disabled;
+- Prometheus scrape discovery annotations controlled by Helm values;
 - a non-root serving container with an explicit `RuntimeDefault` seccomp
   profile and PVC `fsGroup` ownership.
 
@@ -17,20 +18,17 @@ for inspection or an explicitly approved cleanup.
 
 ## Install
 
-The model commit and image digest are intentionally deferred until their
-compatibility smoke tests complete. Rendering fails until both immutable
-values are supplied:
+The default values directly pin the official `vllm/vllm-openai` image by
+digest and `Qwen/Qwen3-4B-AWQ` by Hugging Face commit:
 
 ```sh
 helm upgrade --install llm-inference ./charts/llm-inference \
   --namespace llm-inference \
-  --create-namespace \
-  --set-string model.revision=<40-lowercase-hex-commit> \
-  --set-string image.digest=sha256:<64-lowercase-hex>
+  --create-namespace
 ```
 
-The image is consumed as `repository@sha256:digest`; tags are not used.
-`Qwen/Qwen3-4B-AWQ` is the default model ID. The default serving profile is
+The image is consumed as `repository@sha256:digest`; tags and a custom wrapper
+are not used. The default serving profile is
 `max_model_len=4096`, `max_num_seqs=1`, `max_new_tokens=512`, and
 `gpu_memory_utilization=0.85`.
 
@@ -45,8 +43,6 @@ helm upgrade --install llm-inference-speculative ./charts/llm-inference \
   --create-namespace \
   --set-string namespace=llm-inference-speculative \
   --set-string fullnameOverride=llm-inference-speculative \
-  --set-string model.revision=<40-lowercase-hex-target-commit> \
-  --set-string image.digest=sha256:<64-lowercase-hex> \
   --set speculativeDecoding.enabled=true \
   --set-string speculativeDecoding.draftModel.revision=<40-lowercase-hex-draft-commit>
 ```
@@ -89,12 +85,8 @@ PVC request is a storage request, not a hard disk quota. This chart is a
 single-node learning deployment; it does not provide ingress, autoscaling,
 multi-GPU serving, or production traffic management.
 
-## Pending runtime evidence
+## Runtime evidence
 
-- The exact Hugging Face commit for `Qwen/Qwen3-4B-AWQ` is not selected until
-  the model compatibility smoke test records it.
-- The exact public wrapper image digest is not selected until the image build
-  records it.
-- Live Helm lint/template, API smoke, upgrade, and rollback evidence must be
-  run on the declared remote Linux validation host after the admitted k3s
-  runtime and wrapper image exist.
+Live API smoke, upgrade, and rollback evidence must run on the declared remote
+Linux validation host after host preflight succeeds. Local and CI checks
+remain CPU-safe and only lint, render, and inspect the chart.

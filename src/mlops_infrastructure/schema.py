@@ -1,8 +1,7 @@
-"""Small Draft 2020-12 subset used by the dependency-free synthetic seam.
+"""Small Draft 2020-12 subset for bounded infrastructure JSON contracts.
 
-The cross-repository v1 contracts intentionally use only these keywords. An
-unknown assertion keyword fails closed so contract evolution cannot silently
-bypass validation.
+An unknown assertion keyword fails closed so contract evolution cannot
+silently bypass validation.
 """
 
 from __future__ import annotations
@@ -126,4 +125,3 @@ def _validate(value: Any, node: dict[str, Any], root: dict[str, Any], path: str)
 
     if isinstance(value, int) and value < node.get("minimum", value):
         raise SchemaError(f"{path} is below its minimum")
-
