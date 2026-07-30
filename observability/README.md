@@ -41,5 +41,6 @@ Nothing exposes an ingress or claims a production monitoring capability.
 `bin/check-observability` is the offline CI boundary: it checks pinned chart
 versions, minimal values, vLLM scrape integration, valid dashboard JSON, and
 the required raw Prometheus queries. It does not contact a chart repository,
-cluster, Prometheus, Grafana, vLLM, or GPU. Follow
-[`run-live-benchmark.md`](run-live-benchmark.md) for the required live checks.
+cluster, Prometheus, Grafana, vLLM, or GPU. Follow the canonical
+[`docs/live-lab.md`](../docs/live-lab.md) procedure for benchmark traffic and
+the required live checks.
