@@ -24,8 +24,8 @@ rendered-secrets/
 .k3s/
 
 # Runtime systems of record and generated evidence stay outside Git.
-mlruns/
-minio-data/
+tracking-data/
+object-store-data/
 model-cache/
 raw-data/
 raw-evaluation/
@@ -44,3 +44,4 @@ host-evidence/
 runtime-evidence/
 runtime-logs/
 out/
+lab-results/

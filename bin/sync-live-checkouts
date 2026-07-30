@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Refuse dirty checkouts, fast-forward origin/main, and record resolved revisions.
+set -euo pipefail
+
+if [[ "$#" -ne 3 ]]; then
+  echo "usage: sync-live-checkouts PROJECT_DIR INFRASTRUCTURE_DIR OUTPUT_JSON" >&2
+  exit 2
+fi
+
+project_dir=$1
+infrastructure_dir=$2
+output_json=$3
+
+for checkout in "$project_dir" "$infrastructure_dir"; do
+  git -C "$checkout" rev-parse --is-inside-work-tree >/dev/null
+  if [[ -n "$(git -C "$checkout" status --porcelain)" ]]; then
+    echo "refusing dirty checkout: $checkout" >&2
+    exit 1
+  fi
+done
+
+for checkout in "$project_dir" "$infrastructure_dir"; do
+  git -C "$checkout" fetch origin main
+  git -C "$checkout" merge --ff-only origin/main
+done
+
+project_revision=$(git -C "$project_dir" rev-parse HEAD)
+infrastructure_revision=$(git -C "$infrastructure_dir" rev-parse HEAD)
+
+python3 - "$output_json" "$project_revision" "$infrastructure_revision" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+output = Path(sys.argv[1])
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(
+    json.dumps(
+        {
+            "project_revision": sys.argv[2],
+            "infrastructure_revision": sys.argv[3],
+        },
+        indent=2,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY

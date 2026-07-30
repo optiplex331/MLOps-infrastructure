@@ -31,9 +31,10 @@ sudo runtime/nvidia/configure-k3s-containerd.sh
 ```
 
 The configurator runs the documented `nvidia-ctk runtime configure` command
-against `/var/lib/rancher/k3s/agent/etc/containerd/config.toml` and restarts
-the `k3s` service. This keeps the NVIDIA handler in k3s's embedded containerd;
-it does not configure Docker or a second container runtime.
+against `/var/lib/rancher/k3s/agent/etc/containerd/config.toml`, restarts the
+`k3s` service, and applies the pinned NVIDIA device-plugin chart. This keeps
+the NVIDIA handler in k3s's embedded containerd; it does not configure Docker
+or a second container runtime.
 
 Verify the host and container path before scheduling a Pod:
 
@@ -43,9 +44,7 @@ nvidia-ctk --version
 kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}'
 ```
 
-The host-admission collector reads the container runtime version from the
-Kubernetes Node status, so routine collection does not require root access to
-the k3s containerd socket. Record the command outputs in the sanitized
-evidence contract. Do not publish
-the kubeconfig, hostnames, GPU serials, private addresses, or raw containerd
-configuration.
+`bin/host-preflight` reads the container runtime version from Kubernetes Node
+status, so preflight does not require root access to the k3s containerd
+socket. Do not publish kubeconfig, hostnames, GPU serials, private addresses,
+or raw containerd configuration.

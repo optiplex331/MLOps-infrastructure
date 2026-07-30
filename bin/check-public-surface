@@ -18,7 +18,7 @@ BLOCKED_DIRECTORY_NAMES = {
     "evidence",
     "host-evidence",
     "logs",
-    "minio-data",
+    "object-store-data",
     "mlruns",
     "model-cache",
     "raw-data",
@@ -27,6 +27,7 @@ BLOCKED_DIRECTORY_NAMES = {
     "runtime-evidence",
     "runtime-logs",
     "secrets",
+    "tracking-data",
 }
 BLOCKED_FILE_NAMES = {
     "credentials.json",

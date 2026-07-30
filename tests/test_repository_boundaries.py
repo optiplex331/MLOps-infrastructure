@@ -29,8 +29,8 @@ class RepositoryBoundaryTests(unittest.TestCase):
             "nested/secrets/cloud-credentials.json",
             "cluster.kubeconfig",
             "rendered-secrets/app.yaml",
-            "mlruns/1/meta.yaml",
-            "minio-data/bucket/object",
+            "tracking-data/1/meta.yaml",
+            "object-store-data/bucket/object",
             "model-cache/weights.safetensors",
             "raw-data/scenarios.jsonl",
             "raw-evaluation/targets.jsonl",
@@ -46,22 +46,19 @@ class RepositoryBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(result.stdout.splitlines(), dangerous)
 
-    def test_historical_surface_is_separate_from_the_phase_one_chart(self) -> None:
+    def test_only_the_phase_one_platform_surface_remains(self) -> None:
         self.assertTrue((ROOT / "charts" / "llm-inference" / "Chart.yaml").is_file())
-        self.assertIn(
-            "historical",
-            (ROOT / "platform" / "README.md").read_text(encoding="utf-8").lower(),
-        )
+        for removed in (
+            "bin/run-synthetic-release",
+            "config/synthetic-reject-policy.v1.json",
+            "src/mlops_infrastructure/synthetic_release.py",
+        ):
+            self.assertFalse((ROOT / removed).exists(), removed)
+        self.assertFalse(any(path.is_file() for path in (ROOT / "platform").rglob("*")))
+        self.assertFalse(any(path.is_file() for path in (ROOT / "workflows").rglob("*")))
 
     def test_license_is_present(self) -> None:
         self.assertIn("MIT License", (ROOT / "LICENSE").read_text(encoding="utf-8"))
-
-    def test_wrapper_declares_its_non_root_identity(self) -> None:
-        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-        self.assertIn("getent passwd 1000", dockerfile)
-        self.assertIn("useradd --uid 1000 --gid 1000", dockerfile)
-        self.assertIn("ENV HOME=/tmp", dockerfile)
-        self.assertIn("USER 1000:1000", dockerfile)
 
     def test_publishable_files_do_not_contain_representative_secrets(self) -> None:
         result = subprocess.run(

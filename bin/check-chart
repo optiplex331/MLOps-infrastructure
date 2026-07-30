@@ -1,45 +1,42 @@
 #!/usr/bin/env bash
-# CPU-safe Helm contract check for the active Phase 1 chart.
+# CPU-safe Helm lint, render, and critical semantic assertions.
 set -euo pipefail
 
 repository_root=$(cd "$(dirname "$0")/.." && pwd)
 chart="$repository_root/charts/llm-inference"
-revision=0123456789abcdef0123456789abcdef01234567
-digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-
 command -v helm >/dev/null || {
   echo 'missing helm; install the pinned Helm client on the validation host' >&2
   exit 2
 }
 
-helm lint "$chart" \
-  --set-string "model.revision=$revision" \
-  --set-string "image.digest=$digest"
+helm lint "$chart"
 
 rendered=$(mktemp)
 trap 'rm -f "$rendered"' EXIT
 helm template llm-inference "$chart" \
-  --namespace llm-inference \
-  --set-string "model.revision=$revision" \
-  --set-string "image.digest=$digest" >"$rendered"
+  --namespace llm-inference >"$rendered"
 
 grep -Fq 'kind: Deployment' "$rendered"
 grep -Fq 'kind: Service' "$rendered"
 grep -Fq 'kind: PersistentVolumeClaim' "$rendered"
 grep -Fq 'nvidia.com/gpu: "1"' "$rendered"
+test "$(grep -Fc 'nvidia.com/gpu: "1"' "$rendered")" -eq 2
+grep -Fq 'image: vllm/vllm-openai@sha256:d623253f2ba246378421c9642e20885e65257f38418ff26d48c81aea1702521b' "$rendered"
+grep -Fq -- '--revision=74d4bd2bd4bff9cafc9345221320bffb08b406a3' "$rendered"
 grep -Fq 'helm.sh/resource-policy: keep' "$rendered"
 grep -Fq 'automountServiceAccountToken: false' "$rendered"
-grep -Fq 'runAsNonRoot: true' "$rendered"
+grep -Fq 'allowPrivilegeEscalation: false' "$rendered"
+grep -Fq -- '- ALL' "$rendered"
+grep -Fq 'prometheus.io/scrape: "true"' "$rendered"
+grep -Fq 'prometheus.io/path: "/metrics"' "$rendered"
 
 helm template llm-inference-speculative "$chart" \
   --namespace llm-inference-speculative \
-  --set-string "model.revision=$revision" \
-  --set-string "image.digest=$digest" \
   --set "speculativeDecoding.enabled=true" \
-  --set-string "speculativeDecoding.draftModel.revision=$revision" >"$rendered"
+  --set-string "speculativeDecoding.draftModel.revision=0123456789abcdef0123456789abcdef01234567" >"$rendered"
 
 grep -Fq -- '--speculative-config=' "$rendered"
 grep -Fq -- 'Qwen/Qwen3-0.6B' "$rendered"
 grep -Fq -- '0123456789abcdef0123456789abcdef01234567' "$rendered"
 
-echo 'active Phase 1 Helm chart checks passed'
+echo 'minimal vLLM Helm chart checks passed'

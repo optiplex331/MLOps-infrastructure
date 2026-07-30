@@ -5,6 +5,10 @@ metadata:
   namespace: {{ .Values.namespace }}
   labels:
     {{- include "llm-inference.labels" . | nindent 4 }}
+  annotations:
+    prometheus.io/scrape: {{ .Values.metrics.scrape | quote }}
+    prometheus.io/path: {{ .Values.metrics.path | quote }}
+    prometheus.io/port: {{ .Values.service.port | quote }}
 spec:
   type: {{ .Values.service.type }}
   selector:

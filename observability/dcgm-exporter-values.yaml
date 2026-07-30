@@ -1,0 +1,19 @@
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    app.kubernetes.io/part-of: llm-inference-lab
+
+service:
+  type: ClusterIP
+
+runtimeClassName: nvidia
+
+tolerations:
+  - key: mlops.local/gpu
+    operator: Equal
+    value: dedicated
+    effect: NoSchedule
+
+nodeSelector:
+  kubernetes.io/arch: amd64
+  mlops.local/gpu: rtx-3080

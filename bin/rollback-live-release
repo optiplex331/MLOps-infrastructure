@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Roll back one Helm revision and prove restored external API behavior.
+set -euo pipefail
+
+if [[ "$#" -ne 2 ]]; then
+  echo "usage: rollback-live-release TARGET_REVISION MODEL" >&2
+  exit 2
+fi
+
+target_revision=$1
+model=$2
+release=llm-inference
+namespace=llm-inference
+repository_root=$(cd "$(dirname "$0")/.." && pwd)
+
+case "$target_revision" in
+  ''|*[!0-9]*) echo "target revision must be a positive integer" >&2; exit 2 ;;
+  0) echo "target revision must be a positive integer" >&2; exit 2 ;;
+esac
+
+before_revision=$(helm status "$release" --namespace "$namespace" \
+  --output json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+helm rollback "$release" "$target_revision" --namespace "$namespace" --wait
+after_revision=$(helm status "$release" --namespace "$namespace" \
+  --output json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+if [[ "$after_revision" -le "$before_revision" ]]; then
+  echo "Helm did not create a new release revision" >&2
+  exit 1
+fi
+
+kubectl -n "$namespace" rollout status deployment/llm-inference --timeout=15m
+kubectl -n "$namespace" port-forward service/llm-inference 18000:8000 \
+  >/tmp/llm-inference-rollback-port-forward.log 2>&1 &
+port_forward_pid=$!
+trap 'kill "$port_forward_pid" 2>/dev/null || true' EXIT
+for _ in $(seq 1 30); do
+  if curl --fail --silent http://127.0.0.1:18000/health >/dev/null; then
+    break
+  fi
+  sleep 2
+done
+"$repository_root/bin/smoke-openai-api" http://127.0.0.1:18000/v1 "$model"
+printf 'rollback restored target revision %s as release revision %s\n' \
+  "$target_revision" "$after_revision"

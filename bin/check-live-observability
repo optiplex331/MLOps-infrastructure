@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Require healthy Prometheus targets/queries and the provisioned Grafana dashboard.
+set -euo pipefail
+
+prometheus_url=${PROMETHEUS_URL:-http://127.0.0.1:9090}
+grafana_url=${GRAFANA_URL:-http://127.0.0.1:3000}
+: "${GRAFANA_USER:?set GRAFANA_USER from the runtime Secret}"
+: "${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD from the runtime Secret}"
+
+targets=$(curl --fail --silent --get --data-urlencode state=active \
+  "$prometheus_url/api/v1/targets")
+python3 -c '
+import json, sys
+payload = json.load(sys.stdin)
+active = payload["data"]["activeTargets"]
+required = ("vllm", "dcgm")
+if payload.get("status") != "success":
+    raise SystemExit("Prometheus target query failed")
+for name in required:
+    matches = [target for target in active if name in json.dumps(target).lower()]
+    if not matches or not any(target.get("health") == "up" for target in matches):
+        raise SystemExit(f"no healthy {name} target")
+' <<<"$targets"
+
+queries=(
+  'sum(rate(vllm:request_success_total[5m]))'
+  'histogram_quantile(0.95, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[5m])))'
+  'sum(rate(vllm:prompt_tokens_total[5m])) + sum(rate(vllm:generation_tokens_total[5m]))'
+  'avg(DCGM_FI_DEV_GPU_UTIL)'
+  'sum(DCGM_FI_DEV_FB_USED)'
+)
+for query in "${queries[@]}"; do
+  response=$(curl --fail --silent --get --data-urlencode "query=$query" \
+    "$prometheus_url/api/v1/query")
+  python3 -c '
+import json, sys
+payload = json.load(sys.stdin)
+if payload.get("status") != "success" or not payload["data"]["result"]:
+    raise SystemExit("Prometheus query returned no result")
+' <<<"$response"
+done
+
+curl --fail --silent "$grafana_url/api/health" >/dev/null
+curl --fail --silent --user "$GRAFANA_USER:$GRAFANA_PASSWORD" \
+  "$grafana_url/api/datasources/uid/prometheus/health" >/dev/null
+curl --fail --silent --user "$GRAFANA_USER:$GRAFANA_PASSWORD" \
+  "$grafana_url/api/dashboards/uid/llm-inference-lab" >/dev/null

@@ -1,1 +1,0 @@
-{"apiVersion":"v1","kind":"Namespace","metadata":{"labels":{"app.kubernetes.io/part-of":"mlops-release-lab","pod-security.kubernetes.io/audit":"restricted","pod-security.kubernetes.io/enforce":"baseline","pod-security.kubernetes.io/warn":"restricted"},"name":"mlops-lab"}}

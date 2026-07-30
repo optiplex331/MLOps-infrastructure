@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["image", "model", "serving", "persistence", "resources"],
+  "required": ["image", "model", "serving", "metrics", "persistence", "resources"],
   "properties": {
     "image": {
       "type": "object",
       "required": ["repository", "digest", "pullPolicy"],
       "properties": {
         "repository": {"type": "string", "minLength": 1},
-        "digest": {"type": "string", "pattern": "^$|^sha256:[0-9a-f]{64}$"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
       }
     },
@@ -17,7 +17,15 @@
       "required": ["id", "revision"],
       "properties": {
         "id": {"type": "string", "minLength": 1},
-        "revision": {"type": "string", "pattern": "^$|^[0-9a-f]{40}$"}
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["scrape", "path"],
+      "properties": {
+        "scrape": {"type": "boolean"},
+        "path": {"type": "string", "pattern": "^/"}
       }
     },
     "serving": {

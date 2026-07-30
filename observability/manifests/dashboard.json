@@ -1,0 +1,67 @@
+{
+  "title": "llm-inference lab",
+  "uid": "llm-inference-lab",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Successful requests / second",
+      "targets": [
+        {
+          "expr": "sum(rate(vllm:request_success_total[5m]))",
+          "legendFormat": "success"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "End-to-end latency p95",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Prompt and generation tokens / second",
+      "targets": [
+        {
+          "expr": "sum(rate(vllm:prompt_tokens_total[5m]))",
+          "legendFormat": "prompt"
+        },
+        {
+          "expr": "sum(rate(vllm:generation_tokens_total[5m]))",
+          "legendFormat": "generation"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU utilization",
+      "targets": [
+        {
+          "expr": "avg(DCGM_FI_DEV_GPU_UTIL)",
+          "legendFormat": "percent"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU framebuffer memory used",
+      "targets": [
+        {
+          "expr": "sum(DCGM_FI_DEV_FB_USED)",
+          "legendFormat": "MiB"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Explicit remote-host operation: create and execute the pinned one-GPU Pod.
+set -euo pipefail
+
+repository_root=$(cd "$(dirname "$0")/.." && pwd)
+manifest_root="$repository_root/manifests/gpu-smoke"
+namespace=llm-inference-gpu-smoke
+
+command -v kubectl >/dev/null || { echo "missing kubectl; run bin/host-preflight first" >&2; exit 2; }
+
+kubectl apply -f "$manifest_root/namespace.yaml"
+kubectl delete pod -n "$namespace" gpu-smoke --ignore-not-found --wait=true
+kubectl apply -f "$manifest_root/pod.yaml"
+kubectl wait -n "$namespace" --for=jsonpath='{.status.phase}'=Succeeded pod/gpu-smoke --timeout=180s
+kubectl logs -n "$namespace" gpu-smoke

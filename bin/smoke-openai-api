@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Verify model discovery and one chat completion through the local port-forward.
+set -euo pipefail
+
+base_url=${1:-http://127.0.0.1:8000/v1}
+model=${2:?usage: smoke-openai-api [BASE_URL] MODEL}
+
+curl --fail --silent "$base_url/models" >/dev/null
+curl --fail --silent \
+  -H 'Content-Type: application/json' \
+  --data "$(python3 - "$model" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "model": sys.argv[1],
+    "messages": [{"role": "user", "content": "Reply with exactly: ready"}],
+    "max_tokens": 16,
+    "temperature": 0,
+}))
+PY
+)" \
+  "$base_url/chat/completions" >/dev/null

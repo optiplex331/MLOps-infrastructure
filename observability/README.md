@@ -1,11 +1,20 @@
-# Phase 1 observability
+# Minimal observability
 
-This directory contains the small, port-forward-only observation surface for
-the single-node lab. Install the pinned `kube-prometheus-stack` chart version
-listed in `helm-values.yaml`, then apply the candidate-owned resources:
+This directory contains the port-forward-only observation surface for the
+single-node lab: Prometheus, Grafana, one vLLM dashboard, and NVIDIA DCGM
+Exporter. It deliberately excludes Alertmanager, default dashboards and
+rules, recording rules, SLOs, long retention, high availability,
+`kube-state-metrics`, and node exporter.
+
+Run these commands only on the declared remote Linux host. The versions file
+pins both upstream charts; do not replace them with an unversioned install.
 
 ```sh
+set -a
+. observability/chart-versions.env
+set +a
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add nvidia https://nvidia.github.io/dcgm-exporter/helm-charts
 helm repo update
 kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n monitoring create secret generic monitoring-grafana \
@@ -14,16 +23,23 @@ kubectl -n monitoring create secret generic monitoring-grafana \
   --dry-run=client -o yaml | kubectl apply -f -
 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
   --namespace monitoring --create-namespace \
-  --version 70.4.2 --values observability/helm-values.yaml
+  --version "$KUBE_PROMETHEUS_STACK_CHART_VERSION" \
+  --values observability/helm-values.yaml
+helm upgrade --install dcgm-exporter nvidia/dcgm-exporter \
+  --namespace monitoring \
+  --version "$DCGM_EXPORTER_CHART_VERSION" \
+  --values observability/dcgm-exporter-values.yaml
 kubectl apply -k observability/manifests
-kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
-kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090
 ```
 
-The chart supplies the collectors; the manifests here own the vLLM scrape,
-recording rules, and dashboard. The Grafana password is created on the remote
-host and never written to Git. GPU VRAM/utilization are captured as sanitized
-`nvidia-smi` context by the Project Repository benchmark; DCGM exporter is not
-a Phase 1 dependency. These resources do not expose an ingress or publish a
-production SLO. A live Evidence Package is created by the remote benchmark
-run and is not checked into this repository.
+The stack chart provisions Grafana's Prometheus datasource. The checked-in
+ConfigMap provisions exactly one lab dashboard, and the ServiceMonitor
+discovers the vLLM service. DCGM Exporter's chart owns its ServiceMonitor.
+The Grafana password is created on the remote host and never written to Git.
+Nothing exposes an ingress or claims a production monitoring capability.
+
+`bin/check-observability` is the offline CI boundary: it checks pinned chart
+versions, minimal values, vLLM scrape integration, valid dashboard JSON, and
+the required raw Prometheus queries. It does not contact a chart repository,
+cluster, Prometheus, Grafana, vLLM, or GPU. Follow
+[`run-live-benchmark.md`](run-live-benchmark.md) for the required live checks.

@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Offline structural checks for the minimal observability configuration."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import re
+
+
+ROOT = Path(__file__).resolve().parents[1]
+OBSERVABILITY = ROOT / "observability"
+
+
+def require(payload: str, pattern: str, source: str) -> None:
+    if re.search(pattern, payload, flags=re.MULTILINE) is None:
+        raise SystemExit(f"{source}: required pattern not found: {pattern}")
+
+
+versions = (OBSERVABILITY / "chart-versions.env").read_text(encoding="utf-8")
+require(versions, r"^KUBE_PROMETHEUS_STACK_CHART_VERSION=\d+\.\d+\.\d+$", "chart-versions.env")
+require(versions, r"^DCGM_EXPORTER_CHART_VERSION=\d+\.\d+\.\d+$", "chart-versions.env")
+
+stack_values = (OBSERVABILITY / "helm-values.yaml").read_text(encoding="utf-8")
+for pattern in (
+    r"^alertmanager:\n  enabled: false$",
+    r"^defaultRules:\n  create: false$",
+    r"^kube-state-metrics:\n  enabled: false$",
+    r"^prometheus-node-exporter:\n  enabled: false$",
+    r"^    retention: 24h$",
+    r"^    retentionSize: 2GB$",
+    r"^  defaultDashboardsEnabled: false$",
+):
+    require(stack_values, pattern, "helm-values.yaml")
+
+dcgm_values = (OBSERVABILITY / "dcgm-exporter-values.yaml").read_text(encoding="utf-8")
+for pattern in (
+    r"^serviceMonitor:\n  enabled: true$",
+    r"^runtimeClassName: nvidia$",
+    r"^  mlops\.local/gpu: rtx-3080$",
+):
+    require(dcgm_values, pattern, "dcgm-exporter-values.yaml")
+
+service_monitor = (
+    OBSERVABILITY / "manifests" / "servicemonitor-vllm.yaml"
+).read_text(encoding="utf-8")
+for expected in ("kind: ServiceMonitor", "port: http", "path: /metrics"):
+    if expected not in service_monitor:
+        raise SystemExit(f"servicemonitor-vllm.yaml: missing {expected}")
+
+kustomization = (
+    OBSERVABILITY / "manifests" / "kustomization.yaml"
+).read_text(encoding="utf-8")
+if "prometheus-rules" in kustomization:
+    raise SystemExit("kustomization.yaml: custom Prometheus rules are not minimal")
+require(kustomization, r"grafana_dashboard: \"1\"", "kustomization.yaml")
+
+dashboard = json.loads(
+    (OBSERVABILITY / "manifests" / "dashboard.json").read_text(encoding="utf-8")
+)
+expressions = {
+    target["expr"]
+    for panel in dashboard["panels"]
+    for target in panel.get("targets", [])
+}
+metric_families = (
+    "vllm:request_success_total",
+    "vllm:e2e_request_latency_seconds_bucket",
+    "vllm:prompt_tokens_total",
+    "vllm:generation_tokens_total",
+    "DCGM_FI_DEV_GPU_UTIL",
+    "DCGM_FI_DEV_FB_USED",
+)
+for metric in metric_families:
+    if not any(metric in expression for expression in expressions):
+        raise SystemExit(f"dashboard.json: missing query for {metric}")
+
+print("observability offline checks passed")
